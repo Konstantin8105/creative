@@ -1,0 +1,9 @@
+Create preprocessor for edit 3D model of finite elements.
+Operating system: Windows.
+3D design: OpenGL.
+Programming language: Golang.
+Type of finite elements: node, line, triangle, 4-node plate.
+Dimensions: 3D (X,Y,Z).
+GUI: enter new eledments. change elements. tables for each finite element for edit manually.
+Result: list of tasks with priority. List tasks for first programming version.
+Note: Split between view model and change model. Use MVC.
