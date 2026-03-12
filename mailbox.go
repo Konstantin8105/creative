@@ -80,12 +80,6 @@ func ParseMails(body string) (ms []Mail, err error) {
 			ms = append(ms, mail)
 		}
 	}
-	for i, m := range ms {
-		if m.ID == 0 {
-			mb.presentID++
-			ms[i].ID = mb.presentID
-		}
-	}
 	log.Printf("ParseMails. amount mails: %d", len(ms))
 	return
 }
@@ -185,6 +179,12 @@ type MailBox struct {
 }
 
 func (mb *MailBox) Add(mails []Mail) {
+	for i, m := range mails {
+		if m.ID == 0 {
+			mb.presentID++
+			mails[i].ID = mb.presentID
+		}
+	}
 	for _, m := range mails {
 		if m.Solved {
 			for i := range mb.mails {
