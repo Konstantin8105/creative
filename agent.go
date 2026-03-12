@@ -42,7 +42,7 @@ func (a Agent) Run(input, output string, colleguase []Agent, mails string) (resu
 	fmt.Fprintf(&buf, "Твой почтовый ящик\n")
 	fmt.Fprintf(&buf, "%s\n", mails)
 	fmt.Fprintf(&buf, "Окончание твоего почтового ящика\n")
-	fmt.Fprintf(&buf, "%s\n", MainBoxPrompt) // написание писем
+	fmt.Fprintf(&buf, "%s\n", MailBoxPrompt) // написание писем
 
 	// запуск агента
 	if AI == nil {

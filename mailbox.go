@@ -7,12 +7,14 @@ import (
 )
 
 type Mail struct {
-	ID       uint64 `json:"id"`
+	ID       uint64 `json:"id"` // ID is unique position in mailbox
 	From     string `json:"from"`
 	To       string `json:"to"`
 	Body     string `json:"body"`
 	Archived bool   `json:"archived"`
-	Solved bool   `json:"solved"`
+	Solved   bool   `json:"solved"`
+	ReplyID  uint64
+	// ThreadID uint64   // for create threads of mails, store ID of first mail in thread
 }
 
 func (m Mail) String() string {
@@ -25,6 +27,7 @@ func (m Mail) String() string {
 
 // ParseMails return mails From AI answer
 func ParseMails(body string) (ms []Mail, err error) {
+	cbody := body
 	for {
 		{
 			start := strings.Index(body, "```json")
@@ -55,7 +58,7 @@ func ParseMails(body string) (ms []Mail, err error) {
 				log.Printf("cannot parse mail: `%s`. err = %v", msg, err)
 				continue
 			}
-			ms = append(ms,mails...)
+			ms = append(ms, mails...)
 			continue
 		}
 		ms = append(ms, mail)
@@ -89,16 +92,26 @@ func ParseMails(body string) (ms []Mail, err error) {
 		}
 	}
 	log.Printf("ParseMails. amount mails: %d", len(ms))
+	if len(ms) == 0 && cbody != "" {
+		log.Printf("ParseMail. cannot parse mail: `%s`", cbody)
+	}
 	return
 }
 
-const MainBoxPrompt Prompt = `
-Полностью реализуй свою роль путем написания новых писем коллегам для решения общей задачи или ответить на их вопросы.
-Ты выполняешь свою роль, а твои коллеги свою, поэтому так можешь идентифицировать кому написать.
-Но не более чем 5 новых/отвеченных писем.
-Необходимо стараться использовать по полной свой лимит писем.
-нет смысла высылать письма самому себе.
-Необходимо стараться 1 письмо - одна изолированная тема, для того чтобы удобней было работать всем.
+const MailBoxPrompt Prompt = `
+ПРАВИЛА РАБОТЫ С ПОЧТОЙ:
+- Каждое письмо должно быть оформлено как JSON-объект.
+- Для ответа на письмо обязательно указывай его ID в поле "id".
+- Для нового письма поле "id" не указывай.
+- Можно отправлять несколько писем сразу, используя массив JSON.
+- Поле "to" должно содержать имя одного получателя.
+- Не отправляй письма самому себе.
+- Ограничение: не более 5 писем за один раз.
+- Ты выполняешь свою роль, а твои коллеги свою, поэтому так можешь идентифицировать кому написать.
+- Необходимо стараться использовать по полной свой лимит писем.
+- В письме одна изолированная тема, для того чтобы удобней было работать всем.
+- Перед отправкой письма проверь, что еще не отвечал на него.
+- Не делать отсулку одинаковых вопросов в письмах.
 При написании письмо в поле "to" необходимо использовать список имен коллеги, не придумываю новых и аккуртано и точно записываю их имя. Также как и "from", т.е. от кого будет проставлено автоматически.
 Не выдумывать id письма, а использовать только те которые доступны. Для новых писем их id будет проставлено автоматически без чьего-либо участия.
 
@@ -201,10 +214,11 @@ type MailBox struct {
 
 func (mb *MailBox) Add(mails []Mail) {
 	for i, m := range mails {
-		if m.ID == 0 {
-			mb.presentID++
-			mails[i].ID = mb.presentID
+		if m.ID != 0 {
+			m.ReplyID = m.ID
 		}
+		mb.presentID++
+		mails[i].ID = mb.presentID
 	}
 	for _, m := range mails {
 		if m.Solved {
@@ -232,7 +246,6 @@ func (mb MailBox) GetUnsolved() (mails string) {
 	return
 }
 
-
 func (mb MailBox) Get(To string) (mails string) {
 	for _, m := range mb.mails {
 		if m.Archived {
@@ -256,7 +269,7 @@ func (mb MailBox) GetSolved() (mails string) {
 		if !m.Solved {
 			continue
 		}
-			mails += m.String()
+		mails += m.String()
 	}
 	return
 }

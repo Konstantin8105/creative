@@ -13,9 +13,10 @@ import (
 )
 
 func main() {
-	log.SetOutput(os.Stdout) 
+	log.SetOutput(os.Stdout)
 
 	inputFile := flag.String("input", "", "Input file with the task (required)")
+	model := flag.String("model", "gpt-oss:20b", "Ollama model name")
 	help := flag.Bool("help", false, "Show help")
 
 	flag.Usage = func() {
@@ -34,7 +35,7 @@ func main() {
 
 	creative.AI = new(creative.Ollama{
 		Endpoint: "http://localhost:11434/api/generate",
-		Model:    "gpt-oss:20b",
+		Model:    *model,
 	})
 	// create agents
 	agents := []creative.Agent{
