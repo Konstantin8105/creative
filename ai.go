@@ -24,7 +24,7 @@ type Ollama struct {
 
 func (o Ollama) Run(request string) (responce string, err error) {
 	if o.RequestTimeout == 0 {
-	o.RequestTimeout = 40 * time.Minute
+		o.RequestTimeout = 40 * time.Minute
 	}
 	type ollamaRequest struct {
 		Model   string                 `json:"model"`
