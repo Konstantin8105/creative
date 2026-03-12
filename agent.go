@@ -63,7 +63,6 @@ func (a Agent) Run(input, output string, colleguase []Agent, mails string) (resu
 	}
 	for i := range results {
 		results[i].From = a.Name
-		log.Printf("result email: %s", results[i])
 	}
 	return
 }
