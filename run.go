@@ -27,5 +27,6 @@ func Run(
 			output = mailbox.GetSolved()
 		}
 	}
+	output += mailbox.GetUnsolved()
 	return
 }

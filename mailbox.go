@@ -52,6 +52,35 @@ func ParseMails(body string) (ms []Mail, err error) {
 		}
 		ms = append(ms, mail)
 	}
+	if len(ms) == 0 {
+		for {
+			{
+				start := strings.Index(body, "{")
+				if start < 0 {
+					break
+				}
+				body = body[start:]
+			}
+			var msg string
+			finish := strings.Index(body, "}")
+			if finish < 0 {
+				msg = body
+			} else {
+				msg = body[:finish+1]
+				body = body[finish+1:]
+			}
+			// parse message
+			msg = strings.TrimSpace(msg)
+			var mail Mail
+			err = json.Unmarshal([]byte(msg), &mail)
+			if err != nil {
+				log.Printf("cannot parse mail: `%s`. err = %v", msg, err)
+				continue
+			}
+			ms = append(ms, mail)
+		}
+	}
+	log.Printf("ParseMails. amount mails: %d", len(ms))
 	return
 }
 
@@ -59,7 +88,14 @@ const MainBoxPrompt Prompt = `
 Полностью реализуй свою роль путем написания новых писем коллегам для решения общей задачи или ответить на их вопросы.
 Ты выполняешь свою роль, а твои коллеги свою, поэтому так можешь идентифицировать кому написать.
 Но не более чем 5 новых/отвеченных писем.
-При написании письмо в поле "to" необходимо использовать список имен коллеги, не придумываю новых и аккуртано и точно записываю их имя.
+Необходимо стараться использовать по полной свой лимит писем.
+нет смысла высылать письма самому себе.
+Необходимо стараться 1 письмо - одна изолированная тема, для того чтобы удобней было работать всем.
+При написании письмо в поле "to" необходимо использовать список имен коллеги, не придумываю новых и аккуртано и точно записываю их имя. Также как и "from", т.е. от кого будет проставлено автоматически.
+Не выдумывать id письма, а использовать только те которые доступны. Для новых писем их id будет проставлено автоматически без чьего-либо участия.
+
+При написании коллеге, ты предлагаешь он наилучшим образом решит в дальнейшем на основании его роли, его назначении. Это позволит наибыструйшему поиску решению.
+Каждый агент учитывает мнение друг друга с уважением.
 
 Для написания или ответа на письмо используется следующий формат:
 ` + "```json" + `
@@ -114,6 +150,26 @@ const MainBoxPrompt Prompt = `
 ` + "```" + `
 Перевод письма в состояние solved автоматически переводит письма в архивное письмо.
 
+Каждое письмо должно отделено друг от друга, к примеру как пишеться 3 письма о разном:
+` + "```json" + `
+{
+	"id": 345,
+	"solved": true,
+}
+` + "```" + `
+` + "```json" + `
+{
+	"id": 234,
+	"archived": true,
+}
+` + "```" + `
+` + "```json" + `
+{
+	"id": 343,
+	"solved": true,
+}
+` + "```" + `
+
 `
 
 type MailBox struct {
@@ -137,6 +193,20 @@ func (mb *MailBox) Add(mails []Mail) {
 		mb.mails = append(mb.mails, m)
 	}
 }
+
+func (mb MailBox) GetUnsolved() (mails string) {
+	for _, m := range mb.mails {
+		if m.Archived {
+			continue
+		}
+		if m.Solved {
+			continue
+		}
+		mails += m.String()
+	}
+	return
+}
+
 
 func (mb MailBox) Get(To string) (mails string) {
 	for _, m := range mb.mails {

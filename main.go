@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-log.SetOutput(os.Stdout) 
+	log.SetOutput(os.Stdout) 
 
 	inputFile := flag.String("input", "", "Input file with the task (required)")
 	help := flag.Bool("help", false, "Show help")
@@ -200,11 +200,10 @@ log.SetOutput(os.Stdout)
 
 Задача Архивариуса — сделать так, чтобы другим было удобно
 Ты анализируешь свой почтовый ящик последовательно письмо за письмом и если находишь письмо для разбиение, то создаешь новые письма и архивируешь исходное.
-У тебя нет ограничение на количество исходящих от тебя писем.
 `,
 		},
 		{
-			Name: "solved",
+			Name: "solver",
 			Role: `Роль «Завершитель»
 Описание роли
 
@@ -299,6 +298,7 @@ log.SetOutput(os.Stdout)
 		log.Fatal("Input file is empty")
 	}
 	// run
+	creative.MaxIterations = 200
 	output := creative.Run(agents, input)
 	fmt.Fprintf(os.Stdout, "%s\n", output)
 }

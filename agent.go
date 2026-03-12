@@ -49,7 +49,7 @@ func (a Agent) Run(input, output string, colleguase []Agent, mails string) (resu
 		panic(fmt.Errorf("empty AI"))
 	}
 	request := buf.String()
-	log.Printf("agent `%s` request: %s", a.Name, request)
+	log.Printf("agent `%s` request: %d", a.Name, len(request))
 	responce, err := AI.Run(request)
 	log.Printf("agent `%s` response: %s. Error = %v", a.Name, responce, err)
 	if err != nil {
