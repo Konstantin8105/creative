@@ -80,6 +80,12 @@ func ParseMails(body string) (ms []Mail, err error) {
 			ms = append(ms, mail)
 		}
 	}
+	for i, m := range ms {
+		if m.ID == 0 {
+			mb.presentID++
+			ms[i].ID = mb.presentID
+		}
+	}
 	log.Printf("ParseMails. amount mails: %d", len(ms))
 	return
 }
@@ -96,6 +102,7 @@ const MainBoxPrompt Prompt = `
 
 При написании коллеге, ты предлагаешь он наилучшим образом решит в дальнейшем на основании его роли, его назначении. Это позволит наибыструйшему поиску решению.
 Каждый агент учитывает мнение друг друга с уважением.
+Не стоит ссылаться на другие письма, а если нужна ссылка то скопирую текст.
 
 Для написания или ответа на письмо используется следующий формат:
 ` + "```json" + `
@@ -179,10 +186,6 @@ type MailBox struct {
 
 func (mb *MailBox) Add(mails []Mail) {
 	for _, m := range mails {
-		if m.ID == 0 {
-			mb.presentID++
-			m.ID = mb.presentID
-		}
 		if m.Solved {
 			for i := range mb.mails {
 				if mb.mails[i].ID == m.ID {

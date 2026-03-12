@@ -298,7 +298,7 @@ func main() {
 		log.Fatal("Input file is empty")
 	}
 	// run
-	creative.MaxIterations = 200
+	creative.MaxIterations = 2000
 	output := creative.Run(agents, input)
 	fmt.Fprintf(os.Stdout, "%s\n", output)
 }
