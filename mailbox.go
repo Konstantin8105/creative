@@ -134,7 +134,7 @@ func ParseMails(body string) (ms []Mail, err error) {
 			var msg string
 			finish := strings.Index(body, "}")
 			if finish < 0 {
-				msg = body
+				break
 			} else {
 				msg = body[:finish+1]
 				body = body[finish+1:]
