@@ -1,0 +1,21 @@
+[
+  {
+    "id": 0,
+    "to": "critic",
+    "body": "Define structs: type Node struct{ID int; X,Y,Z float64;}; type Line struct{ID int; N1,N2 int;}; type Triangle struct{ID int; N1,N2,N3 int;}; type Plate4 struct{ID int; N1,N2,N3,N4 int;}; Add json tags and implement MarshalJSON/UnmarshalJSON."
+  },
+  {
+    "id": 3,
+    "to": "critic",
+    "body": "Implement LoadModel(filename string) (*Model,error) and SaveModel(filename string, m *Model) error; serialize element slices with IDs and relationships."
+  },
+  {
+    "id": 5,
+    "to": "critic",
+    "body": "Use VBO/VAO per element type, update buffers on change, enable glCullFace for back-face culling, use glfwSwapInterval(1) for VSync, profile FPS with glfwGetTime() and log if below threshold."
+  },
+  {
+    "to": "critic",
+    "body": "Tasks for v1: 1) Define data structures and JSON serialization. 2) Implement load/save JSON. 3) Design MVC separation. 4) Build GUI for element CRUD with tables. 5) Implement VBO/VAO rendering loop with culling and VSync. 6) Add memory manager for dynamic nodes. 7) Optimize buffer updates for large models. 8) Ensure Windows10/OpenGL2.1 compatibility. 9) Create test model 10k nodes 5k lines. Priorities: 1-6 high, 7-9 medium."
+  }
+]

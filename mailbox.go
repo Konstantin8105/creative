@@ -57,6 +57,17 @@ func ParseMails(body string) (ms []Mail, err error) {
 		return
 	}
 	cbody := body
+	body = strings.ReplaceAll(body, "```json", "")
+	body = strings.ReplaceAll(body, "```", "")
+	if len(ms) == 0 {
+		var mails []Mail
+		err = json.Unmarshal([]byte(body), &mails)
+		if err != nil {
+			log.Printf("cannot parse mail 3. err = %v", err)
+		} else {
+			ms = append(ms, mails...)
+		}
+	}
 	for range 1000 { // avoid infinity
 		{
 			start := strings.Index(body, "```json")
@@ -84,7 +95,7 @@ func ParseMails(body string) (ms []Mail, err error) {
 			var mails []Mail
 			err = json.Unmarshal([]byte(msg), &mail)
 			if err != nil {
-				log.Printf("cannot parse mail: `%s`. err = %v", msg, err)
+				log.Printf("cannot parse mail 1: `%s`. err = %v", msg, err)
 				continue
 			}
 			ms = append(ms, mails...)
@@ -114,7 +125,7 @@ func ParseMails(body string) (ms []Mail, err error) {
 			var mail Mail
 			err = json.Unmarshal([]byte(msg), &mail)
 			if err != nil {
-				log.Printf("cannot parse mail: `%s`. err = %v", msg, err)
+				log.Printf("cannot parse mail 2: `%s`. err = %v", msg, err)
 				continue
 			}
 			ms = append(ms, mail)
@@ -122,7 +133,7 @@ func ParseMails(body string) (ms []Mail, err error) {
 	}
 	log.Printf("ParseMails. amount mails: %d", len(ms))
 	if len(ms) == 0 {
-		log.Printf("ParseMail. cannot parse mail: `%s`", cbody)
+		log.Printf("ParseMail. cannot parse mail 4: `%s`", cbody)
 	}
 	return
 }
