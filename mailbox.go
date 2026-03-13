@@ -53,6 +53,17 @@ func (m Mail) String() string {
 
 // ParseMails return mails From AI answer
 func ParseMails(body string) (ms []Mail, err error) {
+	defer func() {
+		// remove empty mails
+	again:
+		for i := range ms {
+			if ms[i].To == "" || ms[i].Body == "" {
+				ms = append(ms[:i], ms[i+1:]...)
+				goto again
+			}
+		}
+		log.Printf("ParseMails. amount mails: %d", len(ms))
+	}()
 	body = strings.TrimSpace(body)
 	if len(body) == 0 {
 		return
@@ -60,13 +71,20 @@ func ParseMails(body string) (ms []Mail, err error) {
 	cbody := body
 	body = strings.ReplaceAll(body, "```json", "")
 	body = strings.ReplaceAll(body, "```", "")
-	if len(ms) == 0 {
+	{
 		var mails []Mail
 		err = json.Unmarshal([]byte(body), &mails)
-		if err != nil {
-			log.Printf("cannot parse mail 3. err = %v", err)
-		} else {
+		if err == nil {
 			ms = append(ms, mails...)
+			return
+		}
+	}
+	{
+		var mail Mail
+		err = json.Unmarshal([]byte(body), &mail)
+		if err == nil {
+			ms = append(ms, mail)
+			return
 		}
 	}
 	for range 1000 { // avoid infinity
@@ -132,7 +150,6 @@ func ParseMails(body string) (ms []Mail, err error) {
 			ms = append(ms, mail)
 		}
 	}
-	log.Printf("ParseMails. amount mails: %d", len(ms))
 	if len(ms) == 0 {
 		log.Printf("ParseMail. cannot parse mail 4: `%s`", cbody)
 	}
