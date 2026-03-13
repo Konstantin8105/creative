@@ -42,7 +42,7 @@ func main() {
 	agents := []creative.Agent{
 		creative.AgentFile(filepath.Join("agent", "dreamer.md")),
 		creative.AgentFile(filepath.Join("agent", "realist.md")),
-		creative.AgentFile(filepath.Join("agent", "ctiric.md")),
+		creative.AgentFile(filepath.Join("agent", "critic.md")),
 		// creative.AgentFile(filepath.Join("agent", "arxiv.md")),
 		// creative.AgentFile(filepath.Join("agent", "solver.md")),
 	}
