@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 type Prompt string
@@ -12,6 +15,26 @@ type Agent struct {
 	Name  string // short name of agent
 	Role  Prompt
 	Other []Agent
+}
+
+func AgentFile(filename string) (a Agent) {
+	name := filename
+	{
+		index := strings.LastIndex(name, string(filepath.Separator))
+		index += len(string(filepath.Separator))
+		name = name[index:]
+		index = strings.LastIndex(name, ".")
+		if 0 < index {
+			name = name[:index]
+		}
+	}
+	a.Name = name
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		panic(fmt.Errorf("Error reading input file: %v", err))
+	}
+	a.Role = Prompt(string(data))
+	return
 }
 
 func (a Agent) Run(input, output string, colleguase []Agent, mails string) (results []Mail) {
