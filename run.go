@@ -3,7 +3,8 @@ package creative
 import "strings"
 
 var (
-	MaxIterations = 3 // maximal agents runs
+	MaxIterations = 3             // maximal agents runs
+	MailBoxFile   = "mailbox.out" // filename for default sdave mailbox
 )
 
 func Run(
@@ -22,9 +23,10 @@ func Run(
 			if agent.Name == "" || agent.Role == "" {
 				continue
 			}
-			mails := agent.Run(input, output, agents, mailbox.Get(agent.Name))
+			mails := agent.Run(input, output, agents, mailbox.GetThreads(agent.Name))
 			mailbox.Add(mails)
 			output = mailbox.GetSolved()
+			mailbox.Save(MailBoxFile)
 		}
 	}
 	output += mailbox.GetUnsolved()

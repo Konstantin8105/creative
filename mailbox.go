@@ -2,18 +2,43 @@ package creative
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"os"
 	"strings"
 )
 
+type ShortMessage struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	Body string `json:"body"`
+}
+
+func (s ShortMessage) String() string {
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		log.Printf("mail string error: %v", err)
+	}
+	return string(data)
+}
+
+func Convert(m Mail) ShortMessage {
+	return ShortMessage{
+		From: m.From,
+		To:   m.To,
+		Body: m.Body,
+	}
+}
+
 type Mail struct {
-	ID       uint64 `json:"id"` // ID is unique position in mailbox
+	// ID is unique position in mailbox
+	ID       int    `json:"id"`
 	From     string `json:"from"`
 	To       string `json:"to"`
 	Body     string `json:"body"`
 	Archived bool   `json:"archived"`
 	Solved   bool   `json:"solved"`
-	ReplyID  uint64
+	ReplyID  int
 	// ThreadID uint64   // for create threads of mails, store ID of first mail in thread
 }
 
@@ -27,8 +52,12 @@ func (m Mail) String() string {
 
 // ParseMails return mails From AI answer
 func ParseMails(body string) (ms []Mail, err error) {
+	body = strings.TrimSpace(body)
+	if len(body) == 0 {
+		return
+	}
 	cbody := body
-	for {
+	for range 1000 { // avoid infinity
 		{
 			start := strings.Index(body, "```json")
 			if start < 0 {
@@ -92,7 +121,7 @@ func ParseMails(body string) (ms []Mail, err error) {
 		}
 	}
 	log.Printf("ParseMails. amount mails: %d", len(ms))
-	if len(ms) == 0 && cbody != "" {
+	if len(ms) == 0 {
 		log.Printf("ParseMail. cannot parse mail: `%s`", cbody)
 	}
 	return
@@ -106,6 +135,7 @@ const MailBoxPrompt Prompt = `
 - Можно отправлять несколько писем сразу, используя массив JSON.
 - Поле "to" должно содержать имя одного получателя.
 - Не отправляй письма самому себе.
+- Если нечего написать, то не пиши ничего.
 - Ограничение: не более 20 писем за один раз.
 - Ты выполняешь свою роль, а твои коллеги свою, поэтому так можешь идентифицировать кому написать.
 - Необходимо стараться использовать по полной свой лимит писем.
@@ -208,17 +238,30 @@ const MailBoxPrompt Prompt = `
 `
 
 type MailBox struct {
-	presentID uint64
+	presentID int
 	mails     []Mail
 }
 
+func (mb MailBox) Save(filename string) {
+	data, err := json.MarshalIndent(mb.mails, "", "  ")
+	if err != nil {
+		log.Printf("mail save error: %v", err)
+	}
+	err = os.WriteFile(filename, data, 0777)
+	if err != nil {
+		log.Printf("mail save error: %v", err)
+	}
+}
+
 func (mb *MailBox) Add(mails []Mail) {
-	for i, m := range mails {
-		if m.ID != 0 {
-			m.ReplyID = m.ID
+	// prepare new mails for thread mails
+	for i := range mails {
+		mails[i].ReplyID = -1 // default value
+		if mails[i].ID != 0 && mails[i].ID < len(mb.mails) {
+			mails[i].ReplyID = mails[i].ID
 		}
-		mb.presentID++
 		mails[i].ID = mb.presentID
+		mb.presentID++
 	}
 	for _, m := range mails {
 		if m.Solved {
@@ -241,12 +284,13 @@ func (mb MailBox) GetUnsolved() (mails string) {
 		if m.Solved {
 			continue
 		}
-		mails += m.String()
+		mails += Convert(m).String()
 	}
 	return
 }
 
-func (mb MailBox) Get(To string) (mails string) {
+func (mb MailBox) GetThreads(agent string) (mails string) {
+	var all []Mail
 	for _, m := range mb.mails {
 		if m.Archived {
 			continue
@@ -254,9 +298,34 @@ func (mb MailBox) Get(To string) (mails string) {
 		if m.Solved {
 			continue
 		}
-		if To == m.From || To == m.To {
-			mails += m.String()
+		if agent == m.From || agent == m.To {
+			all = append(all, m)
 		}
+	}
+	threads := map[int][]Mail{}
+	for i := range all {
+		if all[i].ReplyID < 0 {
+			threads[all[i].ID] = append(threads[all[i].ID], all[i])
+			continue
+		}
+		threads[all[i].ReplyID] = append(threads[all[i].ReplyID], all[i])
+	}
+	for k, ms := range threads {
+		if k < 0 {
+			continue
+		}
+		mails += fmt.Sprintf("Email thread with base email id: %d\n", k)
+		var sms []ShortMessage
+		for i := range ms {
+			sms = append(sms, Convert(ms[i]))
+		}
+		data, err := json.MarshalIndent(sms, "", "  ")
+		if err != nil {
+			log.Printf("mail string error: %v", err)
+		}
+		mails += "```json\n"
+		mails += string(data) + "\n"
+		mails += "```\n"
 	}
 	return
 }

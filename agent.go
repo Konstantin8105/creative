@@ -39,10 +39,12 @@ func (a Agent) Run(input, output string, colleguase []Agent, mails string) (resu
 		fmt.Fprintf(&buf, "%s\n", output)
 		fmt.Fprintf(&buf, "Окончание описания достигнутых договоренности\n")
 	}
-	fmt.Fprintf(&buf, "Твой почтовый ящик\n")
-	fmt.Fprintf(&buf, "%s\n", mails)
-	log.Printf("Mails of agent %s: %s", a.Name, mails)
-	fmt.Fprintf(&buf, "Окончание твоего почтового ящика\n")
+	if 0 < len(mails) {
+		fmt.Fprintf(&buf, "Твой почтовый ящик\n")
+		fmt.Fprintf(&buf, "%s\n", mails)
+		log.Printf("Mails of agent %s: %s", a.Name, mails)
+		fmt.Fprintf(&buf, "Окончание твоего почтового ящика\n")
+	}
 	fmt.Fprintf(&buf, "%s\n", MailBoxPrompt) // написание писем
 
 	// запуск агента
