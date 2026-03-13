@@ -1,0 +1,12 @@
+ [
+  {
+    "id": 0,
+    "to": "realist",
+    "body": "Для узлов: struct Node{ID int; X,Y,Z float64}. Для линий: struct Line{ID int; N1,N2 int}. Треугольники: struct Triangle{ID int; N1,N2,N3 int}. Пластины: struct Plate{ID int; N1,N2,N3,N4 int}. Все элементы в срезах []Node, []Line, []Triangle, []Plate. Сериализуем через json.Marshal/Unmarshal; ключи \"nodes\",\"lines\",\"triangles\",\"plates\"."
+  },
+  {
+    "id": 3,
+    "to": "realist",
+    "body": "Создать Model struct{Nodes []Node; Lines []Line; Triangles []Triangle; Plates []Plate}. Для загрузки: file, json.NewDecoder, Decode(&model). Для сохранения: json.NewEncoder, Encode(&model). Добавить методы Load(path) error, Save(path) error. Логировать ошибки, проверять наличие файла."
+  }
+]
