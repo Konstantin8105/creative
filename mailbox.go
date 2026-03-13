@@ -164,6 +164,24 @@ type MailBox struct {
 	mails     []Mail
 }
 
+func (mb *MailBox) Get(filename string) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		log.Printf("mail get error: %v", err)
+		return
+	}
+	var mails []Mail
+	err = json.Unmarshal([]byte(data), &mails)
+	if err != nil {
+		log.Printf("mail get error: %v", err)
+		return
+	}
+	for i := range mails {
+		mails[i].ID = 0
+	}
+	mb.Add(mails)
+}
+
 func (mb MailBox) Save(filename string) {
 	data, err := json.MarshalIndent(mb.mails, "", "  ")
 	if err != nil {
@@ -198,19 +216,6 @@ func (mb *MailBox) Add(mails []Mail) {
 	}
 }
 
-func (mb MailBox) GetUnsolved() (mails string) {
-	for _, m := range mb.mails {
-		if m.Archived {
-			continue
-		}
-		if m.Solved {
-			continue
-		}
-		mails += Convert(m).String()
-	}
-	return
-}
-
 func (mb MailBox) GetThreads(agent string) (mails string) {
 	var all []Mail
 	for _, m := range mb.mails {
@@ -220,7 +225,7 @@ func (mb MailBox) GetThreads(agent string) (mails string) {
 		if m.Solved {
 			continue
 		}
-		if agent == m.From || agent == m.To {
+		if agent == m.From || agent == m.To || agent == "" {
 			all = append(all, m)
 		}
 	}
