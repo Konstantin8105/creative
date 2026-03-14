@@ -35,7 +35,7 @@ func main() {
 		log.Fatal("Input file required")
 	}
 
-	creative.AI = new(creative.Ollama{
+	creative.AI = new(creative.OllamaRep{
 		Endpoint: "http://localhost:11434/api/generate",
 		Model:    *model,
 	})
