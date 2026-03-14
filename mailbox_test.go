@@ -65,6 +65,7 @@ func TestMailbox(t *testing.T) {
 					t.Fatal(err)
 				}
 				if len(mails) != int(expect) {
+					t.Logf("%v", mails)
 					t.Errorf("not same amount: %d != %d", len(mails), expect)
 				}
 			})

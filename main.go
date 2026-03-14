@@ -26,6 +26,7 @@ func main() {
 
 	inputFile := flag.String("input", "", "Input file with the task (required)")
 	model := flag.String("model", "gpt-oss:20b", "Ollama model name")
+	reloadMailbox := flag.Bool("reload", true, "Reload mailbox if exist")
 	help := flag.Bool("help", false, "Show help")
 
 	flag.Usage = func() {
@@ -68,6 +69,7 @@ func main() {
 	}
 	// run
 	creative.MaxIterations = 2000
+	creative.ReloadMailbox = *reloadMailbox
 	output := creative.Run(agents, input)
 	fmt.Fprintf(os.Stdout, "%s\n", output)
 }

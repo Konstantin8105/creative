@@ -53,6 +53,17 @@ func (m Mail) String() string {
 
 // ParseMails return mails From AI answer
 func ParseMails(body string) (ms []Mail, err error) {
+	defer func() {
+		// remove empty mails
+	again:
+		for i := range ms {
+			if ms[i].To == "" || ms[i].Body == "" {
+				ms = append(ms[:i], ms[i+1:]...)
+				goto again
+			}
+		}
+		log.Printf("ParseMails. amount mails: %d", len(ms))
+	}()
 	body = strings.TrimSpace(body)
 	if len(body) == 0 {
 		return
@@ -123,7 +134,7 @@ func ParseMails(body string) (ms []Mail, err error) {
 			var msg string
 			finish := strings.Index(body, "}")
 			if finish < 0 {
-				msg = body
+				break
 			} else {
 				msg = body[:finish+1]
 				body = body[finish+1:]
@@ -139,7 +150,6 @@ func ParseMails(body string) (ms []Mail, err error) {
 			ms = append(ms, mail)
 		}
 	}
-	log.Printf("ParseMails. amount mails: %d", len(ms))
 	if len(ms) == 0 {
 		log.Printf("ParseMail. cannot parse mail 4: `%s`", cbody)
 	}
@@ -152,6 +162,24 @@ var MailBoxPrompt Prompt
 type MailBox struct {
 	presentID int
 	mails     []Mail
+}
+
+func (mb *MailBox) Get(filename string) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		log.Printf("mail get error: %v", err)
+		return
+	}
+	var mails []Mail
+	err = json.Unmarshal([]byte(data), &mails)
+	if err != nil {
+		log.Printf("mail get error: %v", err)
+		return
+	}
+	for i := range mails {
+		mails[i].ID = 0
+	}
+	mb.Add(mails)
 }
 
 func (mb MailBox) Save(filename string) {
@@ -188,19 +216,6 @@ func (mb *MailBox) Add(mails []Mail) {
 	}
 }
 
-func (mb MailBox) GetUnsolved() (mails string) {
-	for _, m := range mb.mails {
-		if m.Archived {
-			continue
-		}
-		if m.Solved {
-			continue
-		}
-		mails += Convert(m).String()
-	}
-	return
-}
-
 func (mb MailBox) GetThreads(agent string) (mails string) {
 	var all []Mail
 	for _, m := range mb.mails {
@@ -210,7 +225,7 @@ func (mb MailBox) GetThreads(agent string) (mails string) {
 		if m.Solved {
 			continue
 		}
-		if agent == m.From || agent == m.To {
+		if agent == m.From || agent == m.To || agent == "" {
 			all = append(all, m)
 		}
 	}

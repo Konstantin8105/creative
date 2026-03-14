@@ -5,6 +5,7 @@ import "strings"
 var (
 	MaxIterations = 3             // maximal agents runs
 	MailBoxFile   = "mailbox.out" // filename for default sdave mailbox
+	ReloadMailbox bool
 )
 
 func Run(
@@ -18,6 +19,9 @@ func Run(
 		agents[i].Name = strings.TrimSpace(agents[i].Name)
 		agents[i].Role = Prompt(strings.TrimSpace(string(agents[i].Role)))
 	}
+	if ReloadMailbox {
+		mailbox.Get(MailBoxFile)
+	}
 	for iter := 0; iter < MaxIterations; iter++ {
 		for _, agent := range agents {
 			if agent.Name == "" || agent.Role == "" {
@@ -29,6 +33,6 @@ func Run(
 			mailbox.Save(MailBoxFile)
 		}
 	}
-	output += mailbox.GetUnsolved()
+	output += mailbox.GetThreads("")
 	return
 }
