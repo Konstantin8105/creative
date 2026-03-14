@@ -1,0 +1,108 @@
+ [
+  {
+    "to": "realist",
+    "body": "Task 1: Define core data structures for nodes, lines, triangles, and 4-node plates. Priority: 1"
+  },
+  {
+    "to": "realist",
+    "body": "Task 2: Set up MVC architecture – separate Model, View, and Controller layers. Priority: 1"
+  },
+  {
+    "to": "realist",
+    "body": "Task 3: Create main application window with OpenGL 2.1 context using Go OpenGL bindings. Priority: 2"
+  },
+  {
+    "to": "realist",
+    "body": "Task 4: Implement element creation UI – forms for entering coordinates of new elements. Priority: 3"
+  },
+  {
+    "to": "realist",
+    "body": "Task 5: Develop tables for each element type to allow manual editing of properties. Priority: 3"
+  },
+  {
+    "to": "realist",
+    "body": "Task 6: Implement 3D rendering of elements in the view, supporting zoom and rotation. Priority: 4"
+  },
+  {
+    "to": "realist",
+    "body": "Task 7: Add selection and manipulation tools (move, delete, duplicate) for elements in the 3D view. Priority: 4"
+  },
+  {
+    "to": "realist",
+    "body": "Task 8: Implement persistence – save and load models to/from a file format (e.g., JSON). Priority: 5"
+  },
+  {
+    "to": "realist",
+    "body": "Task 9: Add basic validation and error handling for user input and model consistency. Priority: 5"
+  },
+  {
+    "to": "realist",
+    "body": "Task 10: Optimize data structures and rendering loop for large models (10k points, 5k lines). Priority: 6"
+  }
+]
+[
+  {
+    "to": "realist",
+    "body": "Task 11: Add undo/redo functionality for element modifications. Priority: 7"
+  },
+  {
+    "to": "realist",
+    "body": "Task 12: Implement basic unit tests for data model operations (add, delete, update). Priority: 7"
+  },
+  {
+    "to": "realist",
+    "body": "Task 13: Create simple help dialog explaining keyboard shortcuts and UI controls. Priority: 8"
+  },
+  {
+    "to": "realist",
+    "body": "Task 14: Implement export of current model to a plain text format for interoperability. Priority: 8"
+  },
+  {
+    "to": "critic",
+    "body": "Проверьте, не создают ли наши UI-элементы утечки памяти при частом добавлении/удалении узлов."
+  }
+]
+[
+  {
+    "to": "realist",
+    "body": "Task 15: Add basic logging system to record user actions and errors. Priority: 9"
+  },
+  {
+    "to": "realist",
+    "body": "Task 16: Integrate performance profiling hooks to identify bottlenecks in rendering and data manipulation. Priority: 9"
+  },
+  {
+    "to": "realist",
+    "body": "Task 17: Create a simple user preferences dialog (e.g., default element colors, UI theme). Priority: 10"
+  },
+  {
+    "to": "realist",
+    "body": "Task 18: Set up continuous integration pipeline to build and test the application on Windows 10. Priority: 10"
+  },
+  {
+    "to": "realist",
+    "body": "Task 19: Draft initial user manual outlining installation steps, basic workflow, and troubleshooting tips. Priority: 11"
+  }
+]
+[
+  {
+    "to": "realist",
+    "body": "Task 20: Implement keyboard shortcuts for common actions (e.g., Ctrl+Z for undo, Ctrl+S for save). Priority: 12"
+  },
+  {
+    "to": "realist",
+    "body": "Task 21: Add a status bar to display current element count and selected element details. Priority: 12"
+  },
+  {
+    "to": "realist",
+    "body": "Task 22: Create a basic export feature for 3D model to OBJ format for external use. Priority: 13"
+  },
+  {
+    "to": "realist",
+    "body": "Task 23: Implement a simple undo/redo stack that persists across sessions. Priority: 13"
+  },
+  {
+    "to": "realist",
+    "body": "Task 24: Add a light source controller in the UI to adjust lighting for better visualization. Priority: 14"
+  }
+]
