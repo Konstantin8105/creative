@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -107,7 +108,7 @@ func (o OllamaRep) Run(request string) (response string, err error) {
 	messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
 	response += resp
 
-	for range steps {
+	for step := range steps {
 		messages = append(messages, ChatMessage{Role: "user", Content: "Ещё"})
 		resp, err = o.Chat(messages)
 		if err != nil {
@@ -117,6 +118,7 @@ func (o OllamaRep) Run(request string) (response string, err error) {
 		if resp == "" {
 			break
 		}
+		log.Printf("OllamaRep step %d responce: %s", step, resp)
 		messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
 		response += "\n" + resp
 	}
