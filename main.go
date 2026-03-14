@@ -48,7 +48,7 @@ func main() {
 		Endpoint:       "http://localhost:11434/api/generate",
 		Model:          *model,
 		RequestTimeout: 40 * time.Minute,
-		KeepAlive:      "-1",
+		KeepAlive:      "48h",
 	})
 	// create agents
 	agents := []creative.Agent{
