@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 )
 
 var _ AIrunner = new(OllamaSeq)
@@ -14,9 +13,6 @@ var _ AIrunner = new(OllamaSeq)
 type OllamaSeq ollama
 
 func (o OllamaSeq) Run(request string) (responce string, err error) {
-	if o.RequestTimeout == 0 {
-		o.RequestTimeout = 40 * time.Minute
-	}
 	reqBody := ollamaRequest{
 		Model:   o.Model,
 		Prompt:  request,

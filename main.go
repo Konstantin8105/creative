@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Konstantin8105/creative"
 )
@@ -44,8 +45,10 @@ func main() {
 	}
 
 	creative.AI = new(creative.OllamaRep{
-		Endpoint: "http://localhost:11434/api/generate",
-		Model:    *model,
+		Endpoint:       "http://localhost:11434/api/generate",
+		Model:          *model,
+		RequestTimeout: 40 * time.Minute,
+		KeepAlive:      "-1",
 	})
 	// create agents
 	agents := []creative.Agent{
