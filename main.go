@@ -47,7 +47,7 @@ func main() {
 	creative.AI = new(creative.OllamaRep{
 		Endpoint:       "http://localhost:11434/api/generate",
 		Model:          *model,
-		RequestTimeout: 40 * time.Minute,
+		RequestTimeout: 2 * time.Hour,
 		KeepAlive:      "48h",
 	})
 	// create agents
