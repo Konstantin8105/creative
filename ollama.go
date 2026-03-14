@@ -34,17 +34,17 @@ var defaultOllamaOptions = map[string]interface{}{
 
 var (
 	origKeepAlive string
-	keepAliveSet  bool
+	KeepAliveSet  bool = true
 )
 
 func SetGlobalKeepAlive(val string) error {
 	origKeepAlive = os.Getenv("OLLAMA_KEEP_ALIVE")
-	keepAliveSet = true
+	KeepAliveSet = true
 	return os.Setenv("OLLAMA_KEEP_ALIVE", val)
 }
 
 func RestoreGlobalKeepAlive() error {
-	if !keepAliveSet {
+	if !KeepAliveSet {
 		return nil
 	}
 	if origKeepAlive == "" {

@@ -15,6 +15,14 @@ import (
 
 func main() {
 	log.SetOutput(os.Stdout)
+	// Гарантируем восстановление переменной окружения
+	defer creative.KeepAliveGuard()()
+	creative.SetupSignalHandler()
+
+	// Устанавливаем бесконечное удержание модели
+	if err := creative.SetGlobalKeepAlive("-1"); err != nil {
+		log.Fatal(err)
+	}
 
 	inputFile := flag.String("input", "", "Input file with the task (required)")
 	model := flag.String("model", "gpt-oss:20b", "Ollama model name")

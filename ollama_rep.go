@@ -68,7 +68,12 @@ func (o OllamaRep) doRequest(url string, body ollamaRequest) (string, error) {
 
 // Run — для обратной совместимости (generate)
 func (o OllamaRep) RunSeq(request string) (string, error) {
-	return o.doRequest(o.Endpoint, ollamaRequest{Prompt: request})
+	return o.doRequest(o.Endpoint, ollamaRequest{
+		Model:   o.Model,
+		Prompt:  request,
+		Stream:  false,
+		Options: defaultOllamaOptions,
+	})
 }
 
 // chatURL формирует URL для чата
@@ -78,24 +83,29 @@ func (o OllamaRep) chatURL() string {
 
 // Chat отправляет историю сообщений
 func (o OllamaRep) Chat(messages []ChatMessage) (string, error) {
-	return o.doRequest(o.chatURL(), ollamaRequest{Messages: messages})
+	return o.doRequest(o.chatURL(), ollamaRequest{
+		Model:     o.Model,
+		Messages:  messages,
+		Stream:    false,
+		KeepAlive: o.KeepAlive,
+		Options:   defaultOllamaOptions,
+	})
 }
 
 // amount times of running chat
 var steps = 5
 
 // Run — многошаговый диалог с "Ещё"
-func (o OllamaRep) Run(request string) (string, error) {
+func (o OllamaRep) Run(request string) (response string, err error) {
 	var messages []ChatMessage
 	messages = append(messages, ChatMessage{Role: "user", Content: request})
 
-	var full strings.Builder
 	resp, err := o.Chat(messages)
 	if err != nil {
 		return "", err
 	}
 	messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-	full.WriteString(resp)
+	response += resp
 
 	for range steps {
 		messages = append(messages, ChatMessage{Role: "user", Content: "Ещё"})
@@ -103,8 +113,12 @@ func (o OllamaRep) Run(request string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		resp = strings.TrimSpace(resp)
+		if resp == "" {
+			break
+		}
 		messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-		full.WriteString("\n" + resp)
+		response += "\n" + resp
 	}
-	return full.String(), nil
+	return
 }

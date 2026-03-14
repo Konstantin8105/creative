@@ -60,13 +60,20 @@ func ParseMails(body string) (ms []Mail, err error) {
 	cbody := body
 	body = strings.ReplaceAll(body, "```json", "")
 	body = strings.ReplaceAll(body, "```", "")
-	if len(ms) == 0 {
+	{
 		var mails []Mail
 		err = json.Unmarshal([]byte(body), &mails)
-		if err != nil {
-			log.Printf("cannot parse mail 3. err = %v", err)
-		} else {
+		if err == nil {
 			ms = append(ms, mails...)
+			return
+		}
+	}
+	{
+		var mail Mail
+		err = json.Unmarshal([]byte(body), &mail)
+		if err == nil {
+			ms = append(ms, mail)
+			return
 		}
 	}
 	for range 1000 { // avoid infinity
