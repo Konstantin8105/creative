@@ -30,7 +30,7 @@ var defaultOllamaOptions = map[string]interface{}{
 	"top_p":       0.9,
 	"top_k":       40,
 	"num_predict": 3048,
-	"num_ctx":     32000,
+	"num_ctx":     64000,
 }
 
 var (
