@@ -29,7 +29,8 @@ var defaultOllamaOptions = map[string]interface{}{
 	"temperature": 0.7,
 	"top_p":       0.9,
 	"top_k":       40,
-	"num_predict": 2048,
+	"num_predict": 3048,
+	"num_ctx":     32000,
 }
 
 var (
