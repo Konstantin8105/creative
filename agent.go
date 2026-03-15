@@ -80,7 +80,7 @@ func (a Agent) Run(input, output string, colleguase []Agent, mails string) (resu
 	log.Printf("agent `%s` response: %s. Error = %v", a.Name, responce, err)
 	if err != nil {
 		log.Printf("Error of running %s: `%v`", a.Name, err)
-		return
+		// return // no need because responce is not empty
 	}
 	results, err = ParseMails(responce)
 	if err != nil {
