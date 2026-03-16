@@ -9,12 +9,18 @@ import (
 	"strings"
 )
 
+// ShortMessage represents a simplified mail structure for display
+// Valid ranges:
+//   - From: non-empty string (sender agent name)
+//   - To: non-empty string (recipient agent name)
+//   - Body: string content, can be empty but not recommended
 type ShortMessage struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	Body string `json:"body"`
 }
 
+// String returns JSON representation of ShortMessage
 func (s ShortMessage) String() string {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -23,6 +29,7 @@ func (s ShortMessage) String() string {
 	return string(data)
 }
 
+// Convert transforms a Mail to ShortMessage format
 func Convert(m Mail) ShortMessage {
 	return ShortMessage{
 		From: m.From,
@@ -31,6 +38,15 @@ func Convert(m Mail) ShortMessage {
 	}
 }
 
+// Mail represents an email message between agents
+// Valid ranges:
+//   - ID: positive integer, unique identifier
+//   - From: non-empty string (sender)
+//   - To: non-empty string (recipient)
+//   - Body: string content
+//   - Archived: boolean flag
+//   - Solved: boolean flag
+//   - ReplyID: -1 for new threads, positive for replies
 type Mail struct {
 	// ID is unique position in mailbox
 	ID       int    `json:"id"`
@@ -39,10 +55,10 @@ type Mail struct {
 	Body     string `json:"body"`
 	Archived bool   `json:"archived"`
 	Solved   bool   `json:"solved"`
-	ReplyID  int
-	// ThreadID uint64   // for create threads of mails, store ID of first mail in thread
+	ReplyID  int    // -1 for new threads, ID of parent mail for replies
 }
 
+// String returns JSON representation of Mail
 func (m Mail) String() string {
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -51,119 +67,134 @@ func (m Mail) String() string {
 	return string(data)
 }
 
-// ParseMails return mails From AI answer
+// ParseMails extracts Mail objects from AI response text
+// body: AI response string, may contain JSON arrays, single JSON objects, or code blocks
+// Returns: slice of valid Mail objects and any parsing error
 func ParseMails(body string) (ms []Mail, err error) {
-	defer func() {
-		// remove empty mails
-	again:
-		for i := range ms {
-			if ms[i].To == "" || ms[i].Body == "" {
-				ms = append(ms[:i], ms[i+1:]...)
-				goto again
-			}
-		}
-		log.Printf("ParseMails. amount mails: %d", len(ms))
-	}()
+	// Clean and validate input
 	body = strings.TrimSpace(body)
 	if len(body) == 0 {
-		return
+		return []Mail{}, nil
 	}
-	cbody := body
+
+	originalBody := body // Keep original for error reporting
+
+	// Remove markdown code block markers
 	body = strings.ReplaceAll(body, "```json", "")
 	body = strings.ReplaceAll(body, "```", "")
-	{
-		var mails []Mail
-		err = json.Unmarshal([]byte(body), &mails)
-		if err == nil {
-			ms = append(ms, mails...)
-			return
-		}
-	}
-	{
-		var mail Mail
-		err = json.Unmarshal([]byte(body), &mail)
-		if err == nil {
-			ms = append(ms, mail)
-			return
-		}
-	}
-	for range 1000 { // avoid infinity
-		{
-			start := strings.Index(body, "```json")
-			if start < 0 {
-				break
-			}
-			start += 7
-			body = body[start:]
-		}
-		var msg string
-		finish := strings.Index(body, "```")
-		if finish < 0 {
-			msg = body
+	body = strings.TrimSpace(body)
+
+	// Try parsing as JSON array of mails
+	var mailArray []Mail
+	if err = json.Unmarshal([]byte(body), &mailArray); err == nil {
+		ms = append(ms, mailArray...)
+	} else {
+		// Try parsing as single mail object
+		var singleMail Mail
+		if err = json.Unmarshal([]byte(body), &singleMail); err == nil {
+			ms = append(ms, singleMail)
 		} else {
-			msg = body[:finish]
-			body = body[finish+3:]
+			// Try extracting JSON from code blocks
+			ms = extractMailsFromFragments(body)
 		}
-		// parse message
-		msg = strings.TrimSpace(msg)
-		var mail Mail
-		err = json.Unmarshal([]byte(msg), &mail)
-		if err != nil {
-			// log.Printf("cannot parse mail: `%s`. err = %v", msg, err)
-			// try many emails
-			var mails []Mail
-			err = json.Unmarshal([]byte(msg), &mail)
-			if err != nil {
-				log.Printf("cannot parse mail 1: `%s`. err = %v", msg, err)
-				continue
-			}
-			ms = append(ms, mails...)
-			continue
-		}
-		ms = append(ms, mail)
 	}
+
+	// Filter out invalid mails (empty To or Body)
+	ms = filterValidMails(ms)
+
+	log.Printf("ParseMails: extracted %d valid mails", len(ms))
 	if len(ms) == 0 {
-		for {
-			{
-				start := strings.Index(body, "{")
-				if start < 0 {
-					break
-				}
-				body = body[start:]
-			}
-			var msg string
-			finish := strings.Index(body, "}")
-			if finish < 0 {
-				break
-			} else {
-				msg = body[:finish+1]
-				body = body[finish+1:]
-			}
-			// parse message
-			msg = strings.TrimSpace(msg)
-			var mail Mail
-			err = json.Unmarshal([]byte(msg), &mail)
-			if err != nil {
-				log.Printf("cannot parse mail 2: `%s`. err = %v", msg, err)
-				continue
-			}
-			ms = append(ms, mail)
-		}
+		log.Printf("ParseMails: could not parse any mails from: %s",
+			shortenString(originalBody, 200))
 	}
-	if len(ms) == 0 {
-		log.Printf("ParseMail. cannot parse mail 4: `%s`", cbody)
-	}
-	return
+
+	return ms, nil
 }
 
+// extractMailsFromFragments attempts to extract mail JSON from text fragments
+func extractMailsFromFragments(text string) []Mail {
+	var mails []Mail
+
+	// Look for JSON objects in the text
+	start := 0
+	for start < len(text) {
+		// Find opening brace
+		openIdx := strings.Index(text[start:], "{")
+		if openIdx < 0 {
+			break
+		}
+		openIdx += start
+
+		// Find matching closing brace
+		braceCount := 0
+		closeIdx := -1
+		for i := openIdx; i < len(text); i++ {
+			if text[i] == '{' {
+				braceCount++
+			} else if text[i] == '}' {
+				braceCount--
+				if braceCount == 0 {
+					closeIdx = i
+					break
+				}
+			}
+		}
+
+		if closeIdx < 0 {
+			break // No matching closing brace
+		}
+
+		// Extract and parse JSON
+		jsonStr := text[openIdx : closeIdx+1]
+		var mail Mail
+		if err := json.Unmarshal([]byte(jsonStr), &mail); err == nil {
+			mails = append(mails, mail)
+		} else {
+			// Try as array
+			var mailArray []Mail
+			if err := json.Unmarshal([]byte(jsonStr), &mailArray); err == nil {
+				mails = append(mails, mailArray...)
+			}
+		}
+
+		start = closeIdx + 1
+	}
+
+	return mails
+}
+
+// filterValidMails removes mails with empty required fields
+func filterValidMails(mails []Mail) []Mail {
+	var valid []Mail
+	for _, mail := range mails {
+		if mail.To != "" && mail.Body != "" {
+			valid = append(valid, mail)
+		}
+	}
+	return valid
+}
+
+// shortenString truncates a string for logging
+func shortenString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// MailBoxPrompt contains the prompt template for email generation
+//
 //go:embed mailbox.md
 var MailBoxPrompt Prompt
 
+// MailBox manages a collection of mail messages with thread support
 type MailBox struct {
-	presentID int
-	mails     []Mail
+	presentID int    // Next available mail ID
+	mails     []Mail // All mail messages
 }
 
+// Get loads mails from a JSON file
+// filename: path to JSON file containing mail data
 func (mb *MailBox) Get(filename string) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -176,34 +207,45 @@ func (mb *MailBox) Get(filename string) {
 		log.Printf("mail get error: %v", err)
 		return
 	}
+	// Reset IDs before adding
 	for i := range mails {
 		mails[i].ID = 0
 	}
 	mb.Add(mails)
 }
 
+// Save writes all mails to a JSON file
+// filename: path to save JSON file
 func (mb MailBox) Save(filename string) {
 	data, err := json.MarshalIndent(mb.mails, "", "  ")
 	if err != nil {
 		log.Printf("mail save error: %v", err)
+		return
 	}
-	err = os.WriteFile(filename, data, 0777)
+	err = os.WriteFile(filename, data, 0644) // Use more restrictive permissions
 	if err != nil {
 		log.Printf("mail save error: %v", err)
 	}
 }
 
+// Add adds new mails to the mailbox, assigning IDs and managing threads
+// mails: slice of Mail objects to add
 func (mb *MailBox) Add(mails []Mail) {
-	// prepare new mails for thread mails
+	// Assign IDs and set reply relationships
 	for i := range mails {
-		mails[i].ReplyID = -1 // default value
+		mails[i].ReplyID = -1 // Default: new thread
+		// If mail has existing ID and it's within current mailbox bounds, set as reply
 		if mails[i].ID != 0 && mails[i].ID < len(mb.mails) {
 			mails[i].ReplyID = mails[i].ID
 		}
+		// Assign new unique ID
 		mails[i].ID = mb.presentID
 		mb.presentID++
 	}
+
+	// Process each mail
 	for _, m := range mails {
+		// If mail is marked as solved, archive the thread
 		if m.Solved {
 			for i := range mb.mails {
 				if mb.mails[i].ID == m.ID {
@@ -211,61 +253,73 @@ func (mb *MailBox) Add(mails []Mail) {
 				}
 			}
 		}
-		log.Printf("send email in mailbox\n%s", m)
+		log.Printf("Added email to mailbox: %s", m)
 		mb.mails = append(mb.mails, m)
 	}
 }
 
+// GetThreads returns formatted mail threads for a specific agent or all agents
+// agent: agent name to filter threads for, empty string returns all threads
+// Returns: formatted string with mail threads in JSON code blocks
 func (mb MailBox) GetThreads(agent string) (mails string) {
-	var all []Mail
+	// Collect relevant mails
+	var relevantMails []Mail
 	for _, m := range mb.mails {
-		if m.Archived {
-			continue
+		if m.Archived || m.Solved {
+			continue // Skip archived or solved mails
 		}
-		if m.Solved {
-			continue
-		}
-		if agent == m.From || agent == m.To || agent == "" {
-			all = append(all, m)
+		// Filter by agent if specified
+		if agent == "" || agent == m.From || agent == m.To {
+			relevantMails = append(relevantMails, m)
 		}
 	}
-	threads := map[int][]Mail{}
-	for i := range all {
-		if all[i].ReplyID < 0 {
-			threads[all[i].ID] = append(threads[all[i].ID], all[i])
-			continue
+
+	// Group mails by thread (using ReplyID for thread grouping)
+	threads := make(map[int][]Mail)
+	for _, mail := range relevantMails {
+		threadID := mail.ReplyID
+		if threadID < 0 {
+			threadID = mail.ID // New thread starts with its own ID
 		}
-		threads[all[i].ReplyID] = append(threads[all[i].ReplyID], all[i])
+		threads[threadID] = append(threads[threadID], mail)
 	}
-	for k, ms := range threads {
-		if k < 0 {
-			continue
+
+	// Format each thread
+	for threadID, threadMails := range threads {
+		if threadID < 0 {
+			continue // Skip invalid thread IDs
 		}
-		mails += fmt.Sprintf("Email thread with base email id: %d\n", k)
-		var sms []ShortMessage
-		for i := range ms {
-			sms = append(sms, Convert(ms[i]))
+		mails += fmt.Sprintf("Email thread with base email id: %d\n", threadID)
+
+		// Convert to ShortMessage for cleaner output
+		var shortMessages []ShortMessage
+		for _, mail := range threadMails {
+			shortMessages = append(shortMessages, Convert(mail))
 		}
-		data, err := json.MarshalIndent(sms, "", "  ")
+
+		// Format as JSON
+		data, err := json.MarshalIndent(shortMessages, "", "  ")
 		if err != nil {
 			log.Printf("mail string error: %v", err)
+			continue
 		}
+
 		mails += "```json\n"
 		mails += string(data) + "\n"
 		mails += "```\n"
 	}
-	return
+
+	return mails
 }
 
+// GetSolved returns formatted solved mails
+// Returns: concatenated JSON representations of solved mails
 func (mb MailBox) GetSolved() (mails string) {
 	for _, m := range mb.mails {
-		if m.Archived {
-			continue
+		if m.Archived || !m.Solved {
+			continue // Skip archived or unsolved mails
 		}
-		if !m.Solved {
-			continue
-		}
-		mails += m.String()
+		mails += m.String() + "\n"
 	}
-	return
+	return mails
 }

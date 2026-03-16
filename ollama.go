@@ -13,8 +13,18 @@ import (
 
 var _ AIrunner = new(Ollama)
 
+// Ollama is an AI provider implementation for Ollama API
+// It embeds Provider configuration and implements AIrunner interface
 type Ollama Provider
 
+// OllamaRequest represents request structure for Ollama API
+// Valid ranges:
+//   - Model: non-empty string
+//   - Prompt: string (can be empty if Messages provided)
+//   - Messages: array of chat messages
+//   - Stream: boolean
+//   - KeepAlive: duration string like "5m", "1h", "24h", or "-1" for infinite
+//   - Options: map of generation parameters
 type OllamaRequest struct {
 	Model     string                 `json:"model"`
 	Prompt    string                 `json:"prompt"`
@@ -24,19 +34,30 @@ type OllamaRequest struct {
 	Options   map[string]interface{} `json:"options,omitempty"`
 }
 
+// OllamaResponse represents response structure from Ollama API
 type OllamaResponse struct {
 	Response string            `json:"response"`
 	Message  OllamaChatMessage `json:"message"`
 	Done     bool              `json:"done"`
 }
 
+// OllamaChatMessage represents a single message in chat conversation
 type OllamaChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string `json:"role"`    // "user", "assistant", or "system"
+	Content string `json:"content"` // Message content
 }
 
-// doRequest — универсальный метод для отправки запросов
+// doRequest sends HTTP request to Ollama API endpoint
+// endpoint: API endpoint URL, must be non-empty and valid
+// body: request payload
+// Returns: response string or error
 func (o Ollama) doRequest(endpoint string, body OllamaRequest) (string, error) {
+	// Validate endpoint
+	if endpoint == "" {
+		return "", fmt.Errorf("empty endpoint URL")
+	}
+
+	// Set default timeout if not specified
 	if o.RequestTimeout == 0 {
 		o.RequestTimeout = 40 * time.Minute
 	}
@@ -45,24 +66,16 @@ func (o Ollama) doRequest(endpoint string, body OllamaRequest) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal error: %w", err)
 	}
-	/*
-		client := &http.Client{Timeout: o.RequestTimeout}
-		resp, err := client.Post(endpoint, "application/json", bytes.NewBuffer(jsonData))
-		if err != nil {
-			return "", fmt.Errorf("http error: %w", err)
-		}
-		defer resp.Body.Close()
-	*/
 
 	client := &http.Client{Timeout: o.RequestTimeout}
 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("create request error: %w", err)
 	}
-	// Устанавливаем заголовки
+	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 	if o.Key != "" {
-		// Для OpenAI-совместимых API обычно используется Bearer токен
+		// For OpenAI-compatible APIs, Bearer token is typically used
 		req.Header.Set("Authorization", "Bearer "+o.Key)
 	}
 	resp, err := client.Do(req)
@@ -89,23 +102,17 @@ func (o Ollama) doRequest(endpoint string, body OllamaRequest) (string, error) {
 	return rb.Message.Content, nil
 }
 
-// Run — для обратной совместимости (generate)
-// func (o OllamaRep) RunSeq(request string) (string, error) {
-// 	return o.doRequest(o.Endpoint, ollamaRequest{
-// 		Model:   o.Model,
-// 		Prompt:  request,
-// 		Stream:  false,
-// 		Options: defaultOptions,
-// 	})
-// }
-
-// chatURL формирует URL для чата
-// func (o OllamaRep) chatURL() string {
-// 	return strings.Replace(o.Endpoint, "/generate", "/chat", 1)
-// }
-
-// Chat отправляет историю сообщений
+// send sends messages to Ollama API endpoint
+// endpoint: API endpoint URL
+// isChat: true for chat endpoint, false for generate endpoint
+// messages: array of chat messages
+// Returns: response string or error
 func (o Ollama) send(endpoint string, isChat bool, messages []OllamaChatMessage) (string, error) {
+	// Validate model name
+	if o.Model == "" {
+		return "", fmt.Errorf("empty model name")
+	}
+
 	pr := OllamaRequest{
 		Model:     o.Model,
 		Stream:    false,
@@ -122,10 +129,16 @@ func (o Ollama) send(endpoint string, isChat bool, messages []OllamaChatMessage)
 	return o.doRequest(endpoint, pr)
 }
 
-// amount times of running chat
+// steps defines number of additional chat iterations after initial response
+// Valid range: -1 (no additional steps) or positive integer
+// Default: -1 (single response only)
 var steps = -1
 
-// Run — многошаговый диалог с "Ещё"
+// Run executes multi-step dialogue with AI model
+// request: user input string, must be non-empty
+// Returns: concatenated response string or error
+// Note: Uses chat endpoint if steps > 0, otherwise uses generate endpoint
+// In documentation:
 // To generate a response using the generate endpoint, send a POST request with a JSON body specifying the model and prompt:
 // ```bash
 //
@@ -148,13 +161,25 @@ var steps = -1
 //
 // ```
 func (o Ollama) Run(request string) (response string, err error) {
+	// Validate input
+	if request == "" {
+		return "", fmt.Errorf("empty request")
+	}
+
+	// Validate endpoint
+	if o.Endpoint == "" {
+		return "", fmt.Errorf("empty endpoint")
+	}
+
 	var messages []OllamaChatMessage
 	messages = append(messages, OllamaChatMessage{Role: "user", Content: request})
 
 	endpoint := o.Endpoint
-	if endpoint[len(endpoint)-1] != '/' {
+	// Ensure endpoint ends with slash for path concatenation
+	if len(endpoint) > 0 && endpoint[len(endpoint)-1] != '/' {
 		endpoint += "/"
 	}
+
 	isChat := false
 	if 0 < steps {
 		isChat = true
@@ -162,6 +187,7 @@ func (o Ollama) Run(request string) (response string, err error) {
 	} else {
 		endpoint += "generate"
 	}
+
 	log.Printf("Ollama endpoint: %s", endpoint)
 	resp, err := o.send(endpoint, isChat, messages)
 	if err != nil {
@@ -169,19 +195,21 @@ func (o Ollama) Run(request string) (response string, err error) {
 	}
 	messages = append(messages, OllamaChatMessage{Role: "assistant", Content: resp})
 	response += resp
-	log.Printf("Ollama first responce: %s", resp)
+	log.Printf("Ollama first response: %s", resp)
 
-	for i := range steps - 1 {
+	// Execute additional steps if configured
+	// steps-1 because first response already obtained
+	for i := 0; i < steps-1; i++ {
 		messages = append(messages, OllamaChatMessage{Role: "user", Content: "Ещё"})
 		resp, err = o.send(endpoint, isChat, messages)
 		if err != nil {
-			return "", err
+			return response, err // Return partial response on error
 		}
 		resp = strings.TrimSpace(resp)
 		if resp == "" {
-			break
+			break // Stop if empty response
 		}
-		log.Printf("Ollama chat step %d responce: %s", i, resp)
+		log.Printf("Ollama chat step %d response: %s", i, resp)
 		messages = append(messages, OllamaChatMessage{Role: "assistant", Content: resp})
 		response += "\n" + resp
 	}
