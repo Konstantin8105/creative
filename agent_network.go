@@ -52,10 +52,11 @@ func (an *AgentNetwork) AddAgent(filename string) {
 	bodyEmbed, errEmbed := agentFS.ReadFile(filename)
 	if errEmbed == nil {
 		add(filename, string(bodyEmbed))
+		return
 	}
 	// check file system
 	bodyFs, errFs := os.ReadFile(filename)
-	if errFs != nil {
+	if errFs == nil {
 		add(filename, string(bodyFs))
 	}
 	// error handling
@@ -75,6 +76,11 @@ func (an *AgentNetwork) Run(
 	output string, // result of agents work
 	err error, // error handling
 ) {
+	// check amount agents
+	if len(an.Agents) == 0 {
+		err = fmt.Errorf("empty agents list")
+		return
+	}
 	// clearing agents
 	for i := range an.Agents {
 		an.Agents[i].Name = strings.TrimSpace(an.Agents[i].Name)
@@ -127,11 +133,12 @@ func (an *AgentNetwork) Run(
 		// check all agent exist
 		for _, ls := range an.Links {
 			for _, a := range ls {
-				if !exist(a) {
-					err = fmt.Errorf("agent `%s` not exist in link: `%s`",
-						a, ls)
-					return
+				if exist(a) {
+					continue
 				}
+				err = fmt.Errorf("agent `%s` not exist in link: `%s` in list `%s`",
+					a, strings.Join(ls, ","), strings.Join(aan, ","))
+				return
 			}
 		}
 		// check self-links
