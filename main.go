@@ -51,16 +51,15 @@ func main() {
 		KeepAlive:      "48h",
 	})
 	// create agents
-	agents := []creative.Agent{
-		creative.AgentFile(filepath.Join("agent", "dreamer.md")),
-		creative.AgentFile(filepath.Join("agent", "realist.md")),
-		creative.AgentFile(filepath.Join("agent", "critic.md")),
-		// creative.AgentFile(filepath.Join("agent", "arxiv.md")),
-		// creative.AgentFile(filepath.Join("agent", "solver.md")),
-	}
-	for i := range agents {
-		agents[i].Other = agents
-	}
+	var ntw creative.AgentNetwork
+	// add agents
+	ntw.AddAgent(filepath.Join("agent", "dreamer.md"))
+	ntw.AddAgent(filepath.Join("agent", "realist.md"))
+	ntw.AddAgent(filepath.Join("agent", "critic.md"))
+	// ntw.AddAgent(filepath.Join("agent", "arxiv.md"))
+	// ntw.AddAgent(filepath.Join("agent", "solver.md"))
+	// add links
+	ntw.Links = [][]string{{"dreamer", "realist", "critic"}}
 	// Чтение задания из файла
 	data, err := os.ReadFile(*inputFile)
 	if err != nil {
@@ -73,6 +72,9 @@ func main() {
 	// run
 	creative.MaxIterations = 2000
 	creative.ReloadMailbox = *reloadMailbox
-	output := creative.Run(agents, input)
+	output, err := ntw.Run(input)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s", err)
+	}
 	fmt.Fprintf(os.Stdout, "%s\n", output)
 }
