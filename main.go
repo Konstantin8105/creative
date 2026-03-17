@@ -24,6 +24,7 @@ func main() {
 		help          = flag.Bool("help", false, "Show help")
 
 		// AI provider configuration flags
+		ollama      = flag.Bool("ollama", true, "If true, then use Ollama API. If false, then use OpenAI comparable API")
 		endpoint    = flag.String("endpoint", "http://localhost:11434/api/", "AI API endpoint (default: Ollama)")
 		model       = flag.String("model", "gpt-oss:20b", "Model name for AI generation")
 		key         = flag.String("key", "", "API key for external provider (optional)")
@@ -54,14 +55,19 @@ func main() {
 	}
 
 	// Initialize AI provider with configuration
-	creative.AI = new(creative.Ollama{
+	pr := creative.Provider{
 		Endpoint:       *endpoint,
 		Model:          *model,
 		Key:            *key,
 		RequestTimeout: *timeout,
 		KeepAlive:      "48h",
 		ContextSize:    *contextSize,
-	})
+	}
+	if *ollama {
+		creative.AI = new(creative.Ollama(pr))
+	} else {
+		creative.AI = new(creative.RouterAI(pr))
+	}
 
 	// Create agent network
 	var ntw creative.AgentNetwork
