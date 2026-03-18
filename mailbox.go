@@ -168,7 +168,8 @@ func extractMailsFromFragments(text string) []Mail {
 func filterValidMails(mails []Mail) []Mail {
 	var valid []Mail
 	for _, mail := range mails {
-		if mail.To != "" && mail.Body != "" {
+		if (mail.To != "" && mail.Body != "") || // for mail criteria
+			mail.Archived || mail.Solved || 0 < len(mail.Next) { // for commands
 			valid = append(valid, mail)
 		}
 	}
@@ -232,6 +233,37 @@ func (mb MailBox) Save(filename string) {
 // Add adds new mails to the mailbox, assigning IDs and managing threads
 // mails: slice of Mail objects to add
 func (mb *MailBox) Add(mails []Mail) {
+	{
+		// solved
+		for i := range mails {
+			if !mails[i].Solved {
+				continue
+			}
+			id := mails[i].ID
+			for j, m := range mb.mails {
+				if m.ID == id || m.ReplyID == id {
+					mb.mails[j].Archived = true
+					mb.mails[j].Solved = true
+					log.Printf("SOLVED: %s", mb.mails[j])
+				}
+			}
+		}
+	}
+	{
+		// archive
+		for i := range mails {
+			if !mails[i].Archived {
+				continue
+			}
+			id := mails[i].ID
+			for j, m := range mb.mails {
+				if m.ID == id || m.ReplyID == id {
+					mb.mails[j].Archived = true
+					log.Printf("ARCHIVED: %s", mb.mails[j])
+				}
+			}
+		}
+	}
 	// Assign IDs and set reply relationships
 	for i := range mails {
 		mails[i].ReplyID = -1 // Default: new thread
@@ -244,24 +276,17 @@ func (mb *MailBox) Add(mails []Mail) {
 		mb.presentID++
 	}
 
-	// archived next mails
-	for i := range mails {
-		if len(mails[i].Next) != 0 {
-			mails[i].Archived = true
-		}
-	}
-
 	// Process each mail
 	for _, m := range mails {
-		// If mail is marked as solved, archive the thread
-		if m.Solved {
-			for i := range mb.mails {
-				if mb.mails[i].ID == m.ID {
-					mb.mails[i].Archived = true
-				}
-			}
-		}
 		log.Printf("Added email to mailbox: %s", m)
+		if m.Archived {
+			log.Printf("ignore adding Archived mail: %s", m)
+			continue
+		}
+		if m.Solved {
+			log.Printf("ignore adding Solved mail: %s", m)
+			continue
+		}
 		mb.mails = append(mb.mails, m)
 	}
 }

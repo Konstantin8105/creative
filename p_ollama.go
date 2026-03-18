@@ -114,10 +114,9 @@ func (o Ollama) send(endpoint string, isChat bool, messages []ChatMessage) (stri
 	}
 
 	pr := OllamaRequest{
-		Model:     o.Model,
-		Stream:    false,
-		KeepAlive: o.KeepAlive,
-		Options:   defaultOptions(o.ContextSize),
+		Model:   o.Model,
+		Stream:  false,
+		Options: defaultOptions(o.ContextSize),
 	}
 	if isChat {
 		pr.Messages = messages

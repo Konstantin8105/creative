@@ -21,7 +21,6 @@ type Provider struct {
 	ContextSize int // Maximum context window size in tokens
 
 	RequestTimeout time.Duration // Timeout for HTTP requests
-	KeepAlive      string        // Keep-alive duration for model in memory
 }
 
 // defaultOptions returns default generation parameters for AI models

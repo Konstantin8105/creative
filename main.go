@@ -60,7 +60,6 @@ func main() {
 		Model:          *model,
 		Key:            *key,
 		RequestTimeout: *timeout,
-		KeepAlive:      "48h",
 		ContextSize:    *contextSize,
 	}
 	if *ollama {

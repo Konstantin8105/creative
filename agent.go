@@ -4,6 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os"
+)
+
+var (
+	AgentPromptFilename = "agent.out"
 )
 
 // Prompt represents a text prompt for AI agents
@@ -82,6 +87,11 @@ func (a Agent) Run(input, output string, mails string) []Mail {
 
 	request := buf.String()
 	log.Printf("agent `%s` request length: %d", a.Name, len(request))
+
+	if AgentPromptFilename != "" {
+		// ignore error
+		_ = os.WriteFile(AgentPromptFilename, []byte(request), 0777)
+	}
 
 	response, err := AI.Run(request)
 	log.Printf("agent `%s` response: %s. Error = %v", a.Name, response, err)
