@@ -198,15 +198,15 @@ func (r RouterAI) send(endpoint string, isChat bool, messages []ChatMessage) (st
 //	}'
 //
 // ```
-func (r RouterAI) Run(request string) (response string, err error) {
+func (r RouterAI) Run(request string) (response []Mail, err error) {
 	// Validate input
 	if request == "" {
-		return "", fmt.Errorf("empty request")
+		return nil, fmt.Errorf("empty request")
 	}
 
 	// Validate endpoint
 	if r.Endpoint == "" {
-		return "", fmt.Errorf("empty endpoint")
+		return nil, fmt.Errorf("empty endpoint")
 	}
 
 	var messages []ChatMessage
@@ -229,10 +229,13 @@ func (r RouterAI) Run(request string) (response string, err error) {
 	log.Printf("RouterAI endpoint: %s", endpoint)
 	resp, err := r.send(endpoint, isChat, messages)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-	response += resp
+	{
+		ms, _ := ParseMails(resp) // ignore error
+		response = append(response, ms...)
+	}
 	log.Printf("RouterAI first response: %s", resp)
 
 	// Execute additional steps if configured
@@ -249,7 +252,10 @@ func (r RouterAI) Run(request string) (response string, err error) {
 		}
 		log.Printf("RouterAI chat step %d response: %s", i, resp)
 		messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-		response += "\n" + resp
+		{
+			ms, _ := ParseMails(resp) // ignore error
+			response = append(response, ms...)
+		}
 	}
 	return
 }
