@@ -132,7 +132,7 @@ func (o Ollama) send(endpoint string, isChat bool, messages []ChatMessage) (stri
 // steps defines number of additional chat iterations after initial response
 // Valid range: -1 (no additional steps) or positive integer
 // Default: -1 (single response only)
-var steps = -1
+var steps = 2
 
 // Run executes multi-step dialogue with AI model
 // request: user input string, must be non-empty
