@@ -160,15 +160,15 @@ var steps = 2
 //	}'
 //
 // ```
-func (o Ollama) Run(request string) (response string, err error) {
+func (o Ollama) Run(request string) (response []Mail, err error) {
 	// Validate input
 	if request == "" {
-		return "", fmt.Errorf("empty request")
+		return nil, fmt.Errorf("empty request")
 	}
 
 	// Validate endpoint
 	if o.Endpoint == "" {
-		return "", fmt.Errorf("empty endpoint")
+		return nil, fmt.Errorf("empty endpoint")
 	}
 
 	var messages []ChatMessage
@@ -191,10 +191,13 @@ func (o Ollama) Run(request string) (response string, err error) {
 	log.Printf("Ollama endpoint: %s", endpoint)
 	resp, err := o.send(endpoint, isChat, messages)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-	response += resp
+	{
+		ms, _ := ParseMails(resp) // ignore error
+		response = append(response, ms...)
+	}
 	log.Printf("Ollama first response: %s", resp)
 
 	// Execute additional steps if configured
@@ -211,7 +214,10 @@ func (o Ollama) Run(request string) (response string, err error) {
 		}
 		log.Printf("Ollama chat step %d response: %s", i, resp)
 		messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-		response += "\n" + resp
+		{
+			ms, _ := ParseMails(resp) // ignore error
+			response = append(response, ms...)
+		}
 	}
 	return
 }

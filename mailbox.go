@@ -49,13 +49,14 @@ func Convert(m Mail) ShortMessage {
 //   - ReplyID: -1 for new threads, positive for replies
 type Mail struct {
 	// ID is unique position in mailbox
-	ID       int    `json:"id"`
-	From     string `json:"from"`
-	To       string `json:"to"`
-	Body     string `json:"body"`
-	Archived bool   `json:"archived"`
-	Solved   bool   `json:"solved"`
-	ReplyID  int    // -1 for new threads, ID of parent mail for replies
+	ID       int      `json:"id"`
+	From     string   `json:"from"`
+	To       string   `json:"to"`
+	Body     string   `json:"body"`
+	Archived bool     `json:"archived"`
+	Solved   bool     `json:"solved"`
+	Next     []string `json:"next"` // TODO add implementation
+	ReplyID  int      // -1 for new threads, ID of parent mail for replies
 }
 
 // String returns JSON representation of Mail
@@ -241,6 +242,13 @@ func (mb *MailBox) Add(mails []Mail) {
 		// Assign new unique ID
 		mails[i].ID = mb.presentID
 		mb.presentID++
+	}
+
+	// archived next mails
+	for i := range mails {
+		if len(mails[i].Next) != 0 {
+			mails[i].Archived = true
+		}
 	}
 
 	// Process each mail
