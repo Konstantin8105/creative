@@ -46,6 +46,7 @@ func Convert(m Mail) ShortMessage {
 //   - Body: string content
 //   - Archived: boolean flag
 //   - Solved: boolean flag
+//   - Next: list of agents sorted by priority
 //   - ReplyID: -1 for new threads, positive for replies
 type Mail struct {
 	// ID is unique position in mailbox
