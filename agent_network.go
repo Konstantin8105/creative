@@ -115,6 +115,7 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 	}
 
 	// Validate network topology
+	var validAgentName func(name string) bool
 	{
 		// Check for duplicate agent names
 		var allAgentNames []string
@@ -129,7 +130,7 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 		}
 
 		// Helper to check if agent exists
-		agentExists := func(name string) bool {
+		validAgentName = func(name string) bool {
 			for _, n := range allAgentNames {
 				if n == name {
 					return true
@@ -141,7 +142,7 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 		// Check all agents in links exist
 		for _, linkGroup := range an.Links {
 			for _, agentName := range linkGroup {
-				if !agentExists(agentName) {
+				if !validAgentName(agentName) {
 					return "", fmt.Errorf("agent `%s` does not exist in link group: `%s`",
 						agentName, strings.Join(linkGroup, ","))
 				}
@@ -189,6 +190,13 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 	for iter := 0; iter < MaxIterations; iter++ {
 		for _, agent := range an.Agents {
 			mails := agent.Run(input, output, an.mailbox.GetThreads(agent.Name))
+			// if field `to` is not not valid then take from `from`
+			for i := range mails {
+				if validAgentName(mails[i].To) {
+					continue
+				}
+				mails[i].To = mails[i].From
+			}
 			an.mailbox.Add(mails)
 			output = an.mailbox.GetSolved()
 			an.mailbox.Save(MailBoxFile) // Save intermediate mailbox state
