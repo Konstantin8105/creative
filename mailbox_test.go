@@ -41,8 +41,8 @@ func TestMailbox(t *testing.T) {
 			mails := mb.GetThreads(agent)
 			t.Logf("thread `%s`: %s", agent, mails)
 		}
-		view("one")
-		view("two")
+		t.Run("one", func(t *testing.T) { view("one") })
+		t.Run("two", func(t *testing.T) { view("two") })
 	})
 	t.Run("parse", func(t *testing.T) {
 		files, err := filepath.Glob(filepath.Join("testdata", "mp*"))
