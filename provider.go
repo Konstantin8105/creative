@@ -4,6 +4,8 @@ import (
 	"time"
 )
 
+var AdditionMailChatText = "Какие ещё желаешь написать письма или служебные команды? Подумай, какие вопросы могут возникнуть у других ролей после твоего письма. Напиши ответы на них заранее."
+
 // Provider represents configuration for AI model provider
 // Valid ranges:
 //   - Model: non-empty string
@@ -21,22 +23,4 @@ type Provider struct {
 	ContextSize int // Maximum context window size in tokens
 
 	RequestTimeout time.Duration // Timeout for HTTP requests
-}
-
-// defaultOptions returns default generation parameters for AI models
-// context: context window size in tokens, must be positive (typically 1000-200000)
-// Returns: map with default generation options
-func defaultOptions(context int) map[string]interface{} {
-	// Validate context size
-	if context <= 0 {
-		context = 4096 // Default fallback
-	}
-
-	return map[string]interface{}{
-		"temperature": 0.7,     // Range: 0.0-2.0, controls randomness
-		"top_p":       0.9,     // Range: 0.0-1.0, nucleus sampling parameter
-		"top_k":       40,      // Range: 1-100, top-k sampling
-		"num_predict": 3048,    // Maximum tokens to generate, positive integer
-		"num_ctx":     context, // Context window size
-	}
 }

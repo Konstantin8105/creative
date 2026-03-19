@@ -77,6 +77,12 @@ func (a Agent) Run(input, output string, mails string) []Mail {
 	fmt.Fprintf(&buf, "Окончание описания достигнутых договоренности\n")
 	fmt.Fprintf(&buf, "\n")
 
+	// Add mailbox prompt for email generation
+	fmt.Fprintf(&buf, "Правила работы с почтой\n")
+	fmt.Fprintf(&buf, "%s\n", MailBoxPrompt)
+	fmt.Fprintf(&buf, "Окончание правил работы с почтой\n")
+	fmt.Fprintf(&buf, "\n")
+
 	// Add mail threads if any
 	if 0 < len(mails) {
 		fmt.Fprintf(&buf, "Твой почтовый ящик\n")
@@ -84,12 +90,6 @@ func (a Agent) Run(input, output string, mails string) []Mail {
 		fmt.Fprintf(&buf, "Окончание твоего почтового ящика\n")
 		fmt.Fprintf(&buf, "\n")
 	}
-
-	// Add mailbox prompt for email generation
-	fmt.Fprintf(&buf, "Правила работы с почтой\n")
-	fmt.Fprintf(&buf, "%s\n", MailBoxPrompt)
-	fmt.Fprintf(&buf, "Окончание правил работы с почтой\n")
-	fmt.Fprintf(&buf, "\n")
 
 	// Execute agent via AI
 	if AI == nil {

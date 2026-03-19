@@ -292,6 +292,10 @@ func (mb *MailBox) Add(mails []Mail) {
 			log.Printf("ignore adding Solved mail: %s", m)
 			continue
 		}
+		if 0 < len(m.Next) {
+			log.Printf("ignore adding Next mail: %s", m)
+			continue
+		}
 		mb.mails = append(mb.mails, m)
 	}
 }

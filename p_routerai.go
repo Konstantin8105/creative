@@ -241,7 +241,7 @@ func (r RouterAI) Run(request string) (response []Mail, err error) {
 	// Execute additional steps if configured
 	// steps-1 because first response already obtained
 	for i := 0; i < steps-1; i++ {
-		messages = append(messages, ChatMessage{Role: "user", Content: "Ещё"})
+		messages = append(messages, ChatMessage{Role: "user", Content: AdditionMailChatText})
 		resp, err = r.send(endpoint, isChat, messages)
 		if err != nil {
 			return response, err // Return partial response on error

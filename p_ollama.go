@@ -113,10 +113,29 @@ func (o Ollama) send(endpoint string, isChat bool, messages []ChatMessage) (stri
 		return "", fmt.Errorf("empty model name")
 	}
 
+	// defaultOllamaOptions returns default generation parameters for AI models
+	// context: context window size in tokens, must be positive (typically 1000-200000)
+	// Returns: map with default generation options
+	defaultOllamaOptions := func(context int) map[string]interface{} {
+		// Validate context size
+		if context <= 0 {
+			context = 4096 // Default fallback
+		}
+
+		return map[string]interface{}{
+			"temperature": 0.7,     // Range: 0.0-2.0, controls randomness
+			"top_p":       0.9,     // Range: 0.0-1.0, nucleus sampling parameter
+			"top_k":       40,      // Range: 1-100, top-k sampling
+			"num_predict": 3048,    // Maximum tokens to generate, positive integer
+			"num_ctx":     context, // Context window size
+			// "keep_alive":  "60m",   // Avoid cold start
+		}
+	}
+
 	pr := OllamaRequest{
 		Model:   o.Model,
 		Stream:  false,
-		Options: defaultOptions(o.ContextSize),
+		Options: defaultOllamaOptions(o.ContextSize),
 	}
 	if isChat {
 		pr.Messages = messages
@@ -130,8 +149,7 @@ func (o Ollama) send(endpoint string, isChat bool, messages []ChatMessage) (stri
 
 // steps defines number of additional chat iterations after initial response
 // Valid range: -1 (no additional steps) or positive integer
-// Default: -1 (single response only)
-var steps = 2
+var steps = 5
 
 // Run executes multi-step dialogue with AI model
 // request: user input string, must be non-empty
@@ -202,7 +220,7 @@ func (o Ollama) Run(request string) (response []Mail, err error) {
 	// Execute additional steps if configured
 	// steps-1 because first response already obtained
 	for i := 0; i < steps-1; i++ {
-		messages = append(messages, ChatMessage{Role: "user", Content: "Ещё"})
+		messages = append(messages, ChatMessage{Role: "user", Content: AdditionMailChatText})
 		resp, err = o.send(endpoint, isChat, messages)
 		if err != nil {
 			return response, err // Return partial response on error
