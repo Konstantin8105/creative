@@ -64,11 +64,13 @@ func (a Agent) Run(input, output string, mails string) []Mail {
 	fmt.Fprintf(&buf, "Окончание описания общей задачи\n")
 
 	// Add existing agreements if any
+	fmt.Fprintf(&buf, "Достигнутые договоренности, принятые решения, резульата работы\n")
 	if output != "" {
-		fmt.Fprintf(&buf, "Достигнутые договоренности\n")
 		fmt.Fprintf(&buf, "%s\n", output)
-		fmt.Fprintf(&buf, "Окончание описания достигнутых договоренности\n")
+	} else {
+		fmt.Fprintf(&buf, "Нет принятых договоренностей помеченных solved\n")
 	}
+	fmt.Fprintf(&buf, "Окончание описания достигнутых договоренности\n")
 
 	// Add mail threads if any
 	if 0 < len(mails) {
