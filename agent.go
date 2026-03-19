@@ -43,10 +43,12 @@ func (a Agent) Run(input, output string, mails string) []Mail {
 	fmt.Fprintf(&buf, "Описание твоей имени\n")
 	fmt.Fprintf(&buf, "%s\n", string(a.Name))
 	fmt.Fprintf(&buf, "Окончание описания твоей имени\n")
+	fmt.Fprintf(&buf, "\n")
 
 	fmt.Fprintf(&buf, "Описание твоей роли\n")
 	fmt.Fprintf(&buf, "%s\n", string(a.Role))
 	fmt.Fprintf(&buf, "Окончание описания твоей роли\n")
+	fmt.Fprintf(&buf, "\n")
 
 	// Add colleague descriptions
 	for _, c := range a.other {
@@ -56,12 +58,14 @@ func (a Agent) Run(input, output string, mails string) []Mail {
 		fmt.Fprintf(&buf, "Описание роли твоего коллеги по имени: `%s`\n", c.Name)
 		fmt.Fprintf(&buf, "%s\n", string(c.Role))
 		fmt.Fprintf(&buf, "Окончание описания роли `%s`\n", c.Name)
+		fmt.Fprintf(&buf, "\n")
 	}
 
 	// Add task context
 	fmt.Fprintf(&buf, "Общая задача, которую решается с точки зрения твоей роли\n")
 	fmt.Fprintf(&buf, "%s\n", input)
 	fmt.Fprintf(&buf, "Окончание описания общей задачи\n")
+	fmt.Fprintf(&buf, "\n")
 
 	// Add existing agreements if any
 	fmt.Fprintf(&buf, "Достигнутые договоренности, принятые решения, резульата работы\n")
@@ -71,16 +75,21 @@ func (a Agent) Run(input, output string, mails string) []Mail {
 		fmt.Fprintf(&buf, "Нет принятых договоренностей помеченных solved\n")
 	}
 	fmt.Fprintf(&buf, "Окончание описания достигнутых договоренности\n")
+	fmt.Fprintf(&buf, "\n")
 
 	// Add mail threads if any
 	if 0 < len(mails) {
 		fmt.Fprintf(&buf, "Твой почтовый ящик\n")
 		fmt.Fprintf(&buf, "%s\n", mails)
 		fmt.Fprintf(&buf, "Окончание твоего почтового ящика\n")
+		fmt.Fprintf(&buf, "\n")
 	}
 
 	// Add mailbox prompt for email generation
+	fmt.Fprintf(&buf, "Правила работы с почтой\n")
 	fmt.Fprintf(&buf, "%s\n", MailBoxPrompt)
+	fmt.Fprintf(&buf, "Окончание правил работы с почтой\n")
+	fmt.Fprintf(&buf, "\n")
 
 	// Execute agent via AI
 	if AI == nil {
