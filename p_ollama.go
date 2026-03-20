@@ -128,7 +128,7 @@ func (o Ollama) send(endpoint string, isChat bool, messages []ChatMessage) (stri
 			"top_k":       40,      // Range: 1-100, top-k sampling
 			"num_predict": 3048,    // Maximum tokens to generate, positive integer
 			"num_ctx":     context, // Context window size
-			// "keep_alive":  "60m",   // Avoid cold start
+			"keep_alive":  "60m",   // Avoid cold start
 		}
 	}
 
