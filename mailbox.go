@@ -370,6 +370,9 @@ func (mb MailBox) GetSolved() (res string) {
 	}
 	for range 10 {
 		for _, m := range mb.mails {
+			if !m.Solved || !m.Archived {
+				continue
+			}
 			link, ok := relevantMails[m.ID]
 			if !ok {
 				continue

@@ -2,6 +2,7 @@ package creative
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,11 @@ import (
 var (
 	AgentPromptFilename = "agent.out"
 )
+
+// ConflictPrompt contains the prompt template for conflict solving
+//
+//go:embed conflict.md
+var ConflictPrompt Prompt
 
 // Prompt represents a text prompt for AI agents
 type Prompt string
@@ -81,6 +87,12 @@ func (a Agent) Run(input, output string, mails string) []Mail {
 	fmt.Fprintf(&buf, "Правила работы с почтой\n")
 	fmt.Fprintf(&buf, "%s\n", MailBoxPrompt)
 	fmt.Fprintf(&buf, "Окончание правил работы с почтой\n")
+	fmt.Fprintf(&buf, "\n")
+
+	// Add conflict prompt for solving
+	fmt.Fprintf(&buf, "Правила работы при конфликтах\n")
+	fmt.Fprintf(&buf, "%s\n", ConflictPrompt)
+	fmt.Fprintf(&buf, "Окончание правил работы при конфликтах\n")
 	fmt.Fprintf(&buf, "\n")
 
 	// Add mail threads if any
