@@ -198,7 +198,7 @@ func (r RouterAI) send(endpoint string, isChat bool, messages []ChatMessage) (st
 //	}'
 //
 // ```
-func (r RouterAI) Ask(request string, action func(response string)) (err error) {
+func (r RouterAI) Ask(request string, action func(response string) (stop bool)) (err error) {
 	if action == nil {
 		return fmt.Errorf("action function is empty")
 	}
@@ -227,8 +227,11 @@ func (r RouterAI) Ask(request string, action func(response string)) (err error) 
 
 	log.Printf("RouterAI endpoint: %s", endpoint)
 	resp, err := r.send(endpoint, isChat, messages)
-	action(resp)
+	stop := action(resp)
 	if err != nil {
+		return
+	}
+	if stop {
 		return
 	}
 	messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
@@ -240,12 +243,15 @@ func (r RouterAI) Ask(request string, action func(response string)) (err error) 
 		messages = append(messages, ChatMessage{Role: "user", Content: AdditionMailChatText})
 		resp, err = r.send(endpoint, isChat, messages)
 		resp = strings.TrimSpace(resp)
-		action(resp)
+		stop := action(resp)
 		if err != nil {
 			return
 		}
 		if resp == "" {
 			break // Stop if empty response
+		}
+		if stop {
+			return
 		}
 		log.Printf("RouterAI chat step %d response: %s", i, resp)
 		messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
@@ -254,9 +260,10 @@ func (r RouterAI) Ask(request string, action func(response string)) (err error) 
 }
 
 func (r RouterAI) Run(request string) (response []Mail, err error) {
-	err = r.Ask(request, func(resp string) {
+	err = r.Ask(request, func(resp string) (stop bool) {
 		ms, _ := ParseMails(resp)
 		response = append(response, ms...)
+		return false
 	})
 	return
 }
