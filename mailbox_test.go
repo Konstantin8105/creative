@@ -27,7 +27,7 @@ func TestMailbox(t *testing.T) {
 				To:   "two",
 				Body: "text 4",
 			},
-		})
+		}, false)
 		mb.Add([]Mail{
 			{
 				ID:   1,
@@ -35,7 +35,7 @@ func TestMailbox(t *testing.T) {
 				To:   "qwe",
 				Body: "text 3",
 			},
-		})
+		}, false)
 		_ = mb
 		view := func(agent string) {
 			mails := mb.GetThreads(agent)
