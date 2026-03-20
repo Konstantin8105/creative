@@ -178,15 +178,19 @@ var AmountMessages = 2
 //	}'
 //
 // ```
-func (o Ollama) Ask(request string) (response []string, err error) {
+func (o Ollama) Ask(request string, action func(response string)) (err error) {
+	if action == nil {
+		return fmt.Errorf("action function is empty")
+	}
+
 	// Validate input
 	if request == "" {
-		return nil, fmt.Errorf("empty request")
+		return fmt.Errorf("empty request")
 	}
 
 	// Validate endpoint
 	if o.Endpoint == "" {
-		return nil, fmt.Errorf("empty endpoint")
+		return fmt.Errorf("empty endpoint")
 	}
 
 	var messages []ChatMessage
@@ -208,7 +212,7 @@ func (o Ollama) Ask(request string) (response []string, err error) {
 
 	log.Printf("Ollama endpoint: %s", endpoint)
 	resp, err := o.send(endpoint, isChat, messages)
-	response = append(response, resp)
+	action(resp)
 	if err != nil {
 		return
 	}
@@ -221,7 +225,7 @@ func (o Ollama) Ask(request string) (response []string, err error) {
 		messages = append(messages, ChatMessage{Role: "user", Content: AdditionMailChatText})
 		resp, err = o.send(endpoint, isChat, messages)
 		resp = strings.TrimSpace(resp)
-		response = append(response, resp)
+		action(resp)
 		if err != nil {
 			return
 		}
@@ -235,11 +239,10 @@ func (o Ollama) Ask(request string) (response []string, err error) {
 }
 
 func (o Ollama) Run(request string) (response []Mail, err error) {
-	parts, err := o.Ask(request)
-	for _, p := range parts {
-		ms, _ := ParseMails(p)
+	err = o.Ask(request, func(resp string) {
+		ms, _ := ParseMails(resp)
 		response = append(response, ms...)
-	}
+	})
 	return
 }
 

@@ -12,5 +12,5 @@ type AIrunner interface {
 	// Returns: response string and any error encountered
 	Run(request string) (response []Mail, err error)
 
-	Ask(request string) (response []string, err error)
+	Ask(request string, action func(response string)) (err error)
 }
