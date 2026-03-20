@@ -128,10 +128,10 @@ func (o Ollama) send(endpoint string, isChat bool, messages []ChatMessage) (stri
 	return o.doRequest(endpoint, pr)
 }
 
-// steps defines number of additional chat iterations after initial response
-// Valid range: -1 (no additional steps) or positive integer
+// AmountMessages defines number of additional chat iterations after initial response
+// Valid range: -1 (no additional AmountMessages) or positive integer
 // Default: -1 (single response only)
-var steps = 2
+var AmountMessages = 2
 
 // Run executes multi-step dialogue with AI model
 // request: user input string, must be non-empty
@@ -180,7 +180,7 @@ func (o Ollama) Run(request string) (response []Mail, err error) {
 	}
 
 	isChat := false
-	if 0 < steps {
+	if 0 < AmountMessages {
 		isChat = true
 		endpoint += "chat"
 	} else {
@@ -201,7 +201,7 @@ func (o Ollama) Run(request string) (response []Mail, err error) {
 
 	// Execute additional steps if configured
 	// steps-1 because first response already obtained
-	for i := 0; i < steps-1; i++ {
+	for i := 0; i < AmountMessages-1; i++ {
 		messages = append(messages, ChatMessage{Role: "user", Content: "Ещё"})
 		resp, err = o.send(endpoint, isChat, messages)
 		if err != nil {

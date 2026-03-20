@@ -219,7 +219,7 @@ func (r RouterAI) Run(request string) (response []Mail, err error) {
 	}
 
 	isChat := false
-	if 0 < steps {
+	if 0 < AmountMessages {
 		isChat = true
 		endpoint += "chat/completions"
 	} else {
@@ -240,7 +240,7 @@ func (r RouterAI) Run(request string) (response []Mail, err error) {
 
 	// Execute additional steps if configured
 	// steps-1 because first response already obtained
-	for i := 0; i < steps-1; i++ {
+	for i := 0; i < AmountMessages-1; i++ {
 		messages = append(messages, ChatMessage{Role: "user", Content: "Ещё"})
 		resp, err = r.send(endpoint, isChat, messages)
 		if err != nil {
