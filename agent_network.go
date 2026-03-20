@@ -4,6 +4,8 @@ import (
 	"embed"
 	_ "embed"
 	"fmt"
+	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"slices"
@@ -178,7 +180,21 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 
 	// Reload mailbox if configured
 	if ReloadMailbox {
-		an.mailbox.Get(MailBoxFile)
+		mails := an.mailbox.Get(MailBoxFile)
+		// if email have wrong "To" or "From", then change to any acceptable
+		// agent in network
+		for i := range mails {
+			if validAgentName(mails[i].To) && validAgentName(mails[i].From) {
+				continue
+			}
+			// self-note to any agent
+			name := an.Agents[rand.Intn(len(an.Agents))].Name
+			log.Printf("Change to `%s` in email: %s", name, mails[i])
+			mails[i].To = name
+			mails[i].From = name
+		}
+		an.mailbox.Add(mails, true)
+		output = an.mailbox.GetSolved()
 	}
 
 	// Load colleagues for each agent
@@ -197,7 +213,7 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 				}
 				mails[i].To = mails[i].From
 			}
-			an.mailbox.Add(mails)
+			an.mailbox.Add(mails, false)
 			output = an.mailbox.GetSolved()
 			an.mailbox.Save(MailBoxFile) // Save intermediate mailbox state
 		}

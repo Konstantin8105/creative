@@ -72,10 +72,10 @@ func main() {
 	var ntw creative.AgentNetwork
 
 	// Add agents from definition files
-	ntw.AddAgent(filepath.Join("agent", "architect.md"))
-	ntw.AddAgent(filepath.Join("agent", "coordinator.md"))
-	ntw.AddAgent(filepath.Join("agent", "integrator.md"))
-	ntw.AddAgent(filepath.Join("agent", "ender.md"))
+	// ntw.AddAgent(filepath.Join("agent", "architect.md"))
+	// ntw.AddAgent(filepath.Join("agent", "coordinator.md"))
+	// ntw.AddAgent(filepath.Join("agent", "integrator.md"))
+	// ntw.AddAgent(filepath.Join("agent", "ender.md"))
 	// ntw.AddAgent(filepath.Join("agent", "dreamer.md"))
 	// ntw.AddAgent(filepath.Join("agent", "realist.md"))
 	// ntw.AddAgent(filepath.Join("agent", "critic.md"))
@@ -86,12 +86,17 @@ func main() {
 	// Each inner array represents a fully connected group
 	// ntw.Links = [][]string{{"dreamer", "realist", "critic"}}
 	// ntw.Links = [][]string{{"architect", "dreamer", "realist", "critic"}}
-	ntw.Links = [][]string{
-		{"architect", "coordinator"},
-		{"coordinator", "integrator"},
-		{"integrator", "ender"},
-		{"ender", "architect"},
-	}
+	// ntw.Links = [][]string{
+	// 	{"architect", "coordinator"},
+	// 	{"coordinator", "integrator"},
+	// 	{"integrator", "ender"},
+	// 	{"ender", "architect"},
+	// }
+	// ntw.Links = [][]string{{"architect", "ender"}}
+
+	ntw.AddAgent(filepath.Join("agent", "operator.md"))
+	ntw.AddAgent(filepath.Join("agent", "tester.md"))
+	ntw.Links = [][]string{{"operator", "tester"}}
 
 	// Read task from input file
 	data, err := os.ReadFile(*inputFile)

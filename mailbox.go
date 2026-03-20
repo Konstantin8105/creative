@@ -15,6 +15,7 @@ import (
 //   - To: non-empty string (recipient agent name)
 //   - Body: string content, can be empty but not recommended
 type ShortMessage struct {
+	ID   int    `json:"id"`
 	From string `json:"from"`
 	To   string `json:"to"`
 	Body string `json:"body"`
@@ -32,6 +33,7 @@ func (s ShortMessage) String() string {
 // Convert transforms a Mail to ShortMessage format
 func Convert(m Mail) ShortMessage {
 	return ShortMessage{
+		ID:   m.ID,
 		From: m.From,
 		To:   m.To,
 		Body: m.Body,
@@ -198,13 +200,12 @@ type MailBox struct {
 
 // Get loads mails from a JSON file
 // filename: path to JSON file containing mail data
-func (mb *MailBox) Get(filename string) {
+func (mb *MailBox) Get(filename string) (mails []Mail) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		log.Printf("mail get error: %v", err)
 		return
 	}
-	var mails []Mail
 	err = json.Unmarshal([]byte(data), &mails)
 	if err != nil {
 		log.Printf("mail get error: %v", err)
@@ -214,7 +215,7 @@ func (mb *MailBox) Get(filename string) {
 	for i := range mails {
 		mails[i].ID = 0
 	}
-	mb.Add(mails)
+	return
 }
 
 // Save writes all mails to a JSON file
@@ -233,7 +234,10 @@ func (mb MailBox) Save(filename string) {
 
 // Add adds new mails to the mailbox, assigning IDs and managing threads
 // mails: slice of Mail objects to add
-func (mb *MailBox) Add(mails []Mail) {
+func (mb *MailBox) Add(mails []Mail, addAll bool) {
+	if len(mails) == 0 {
+		return
+	}
 	{
 		// solved
 		for i := range mails {
@@ -280,12 +284,16 @@ func (mb *MailBox) Add(mails []Mail) {
 	// Process each mail
 	for _, m := range mails {
 		log.Printf("Added email to mailbox: %s", m)
-		if m.Archived {
+		if !addAll && m.Archived {
 			log.Printf("ignore adding Archived mail: %s", m)
 			continue
 		}
-		if m.Solved {
+		if !addAll && m.Solved {
 			log.Printf("ignore adding Solved mail: %s", m)
+			continue
+		}
+		if 0 < len(m.Next) {
+			log.Printf("ignore adding Next mail: %s", m)
 			continue
 		}
 		mb.mails = append(mb.mails, m)
@@ -348,12 +356,43 @@ func (mb MailBox) GetThreads(agent string) (mails string) {
 
 // GetSolved returns formatted solved mails
 // Returns: concatenated JSON representations of solved mails
-func (mb MailBox) GetSolved() (mails string) {
+func (mb MailBox) GetSolved() (res string) {
+	// Collect relevant mails
+	relevantMails := make(map[int]bool)
 	for _, m := range mb.mails {
-		if m.Archived || !m.Solved {
-			continue // Skip archived or unsolved mails
+		if !m.Solved {
+			continue // Skip unsolved mails
 		}
-		mails += m.String() + "\n"
+		relevantMails[m.ID] = true
+		if 0 <= m.ReplyID {
+			relevantMails[m.ReplyID] = true
+		}
 	}
-	return mails
+	for range 10 {
+		for _, m := range mb.mails {
+			if !m.Solved || !m.Archived {
+				continue
+			}
+			link, ok := relevantMails[m.ID]
+			if !ok {
+				continue
+			}
+			if !link {
+				continue
+			}
+			relevantMails[m.ID] = true
+			if 0 <= m.ReplyID {
+				relevantMails[m.ReplyID] = true
+			}
+		}
+	}
+	for _, m := range mb.mails {
+		link, ok := relevantMails[m.ID]
+		if !ok || !link {
+			continue
+		}
+		res += Convert(m).String() + "\n"
+		// res += m.Body + "\n"
+	}
+	return res
 }
