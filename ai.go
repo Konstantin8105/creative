@@ -11,4 +11,6 @@ type AIrunner interface {
 	// request: input prompt string, must be non-empty
 	// Returns: response string and any error encountered
 	Run(request string) (response []Mail, err error)
+
+	Ask(request string) (response []string, err error)
 }
