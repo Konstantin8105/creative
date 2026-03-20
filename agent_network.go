@@ -193,7 +193,8 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 			mails[i].To = name
 			mails[i].From = name
 		}
-		an.mailbox.Add(mails)
+		an.mailbox.Add(mails, true)
+		output = an.mailbox.GetSolved()
 	}
 
 	// Load colleagues for each agent
@@ -212,7 +213,7 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 				}
 				mails[i].To = mails[i].From
 			}
-			an.mailbox.Add(mails)
+			an.mailbox.Add(mails, false)
 			output = an.mailbox.GetSolved()
 			an.mailbox.Save(MailBoxFile) // Save intermediate mailbox state
 		}
