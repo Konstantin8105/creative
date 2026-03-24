@@ -205,7 +205,7 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 	// Run agent iterations
 	for iter := 0; iter < MaxIterations; iter++ {
 		for _, agent := range an.Agents {
-			mails := agent.Run(input, output, an.mailbox.GetThreads(agent.Name))
+			mails := agent.Run(input, output, an.mailbox.GetThreads(agent.Name), AI.GetContextSize())
 			// if field `to` is not not valid then take from `from`
 			for i := range mails {
 				if validAgentName(mails[i].To) {

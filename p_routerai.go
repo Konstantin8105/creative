@@ -18,6 +18,10 @@ var _ AIrunner = new(RouterAI)
 // RouterAI is a unified API gateway for accessing OpenAI, Anthropic, Google and other providers
 type RouterAI Provider
 
+func (pr RouterAI) GetContextSize() int {
+	return pr.ContextSize
+}
+
 // RouterAIRequest represents request structure for RouterAI API chat completions
 // Valid ranges:
 //   - Model: non-empty string, identifier of the model (see https://routerai.ru/models)

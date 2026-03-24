@@ -11,4 +11,7 @@ type AIrunner interface {
 	// request: input prompt string, must be non-empty
 	// Returns: response string and any error encountered
 	Run(request string) (response []Mail, err error)
+
+	// GetContextSize return context size
+	GetContextSize() int
 }

@@ -17,6 +17,10 @@ var _ AIrunner = new(Ollama)
 // It embeds Provider configuration and implements AIrunner interface
 type Ollama Provider
 
+func (pr Ollama) GetContextSize() int {
+	return pr.ContextSize
+}
+
 // OllamaRequest represents request structure for Ollama API
 // Valid ranges:
 //   - Model: non-empty string
