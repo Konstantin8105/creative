@@ -74,11 +74,11 @@ func (m Mail) String() string {
 // ParseMails extracts Mail objects from AI response text
 // body: AI response string, may contain JSON arrays, single JSON objects, or code blocks
 // Returns: slice of valid Mail objects and any parsing error
-func ParseMails(body string) (ms []Mail, err error) {
+func ParseMails[T any](body string) (ms []T, err error) {
 	// Clean and validate input
 	body = strings.TrimSpace(body)
 	if len(body) == 0 {
-		return []Mail{}, nil
+		return []T{}, nil
 	}
 
 	originalBody := body // Keep original for error reporting
@@ -89,22 +89,19 @@ func ParseMails(body string) (ms []Mail, err error) {
 	body = strings.TrimSpace(body)
 
 	// Try parsing as JSON array of mails
-	var mailArray []Mail
+	var mailArray []T
 	if err = json.Unmarshal([]byte(body), &mailArray); err == nil {
 		ms = append(ms, mailArray...)
 	} else {
 		// Try parsing as single mail object
-		var singleMail Mail
+		var singleMail T
 		if err = json.Unmarshal([]byte(body), &singleMail); err == nil {
 			ms = append(ms, singleMail)
 		} else {
 			// Try extracting JSON from code blocks
-			ms = extractMailsFromFragments(body)
+			ms = extractMailsFromFragments[T](body)
 		}
 	}
-
-	// Filter out invalid mails (empty To or Body)
-	ms = filterValidMails(ms)
 
 	log.Printf("ParseMails: extracted %d valid mails", len(ms))
 	if len(ms) == 0 {
@@ -116,8 +113,8 @@ func ParseMails(body string) (ms []Mail, err error) {
 }
 
 // extractMailsFromFragments attempts to extract mail JSON from text fragments
-func extractMailsFromFragments(text string) []Mail {
-	var mails []Mail
+func extractMailsFromFragments[T any](text string) []T {
+	var mails []T
 
 	// Look for JSON objects in the text
 	start := 0
@@ -150,12 +147,12 @@ func extractMailsFromFragments(text string) []Mail {
 
 		// Extract and parse JSON
 		jsonStr := text[openIdx : closeIdx+1]
-		var mail Mail
+		var mail T
 		if err := json.Unmarshal([]byte(jsonStr), &mail); err == nil {
 			mails = append(mails, mail)
 		} else {
 			// Try as array
-			var mailArray []Mail
+			var mailArray []T
 			if err := json.Unmarshal([]byte(jsonStr), &mailArray); err == nil {
 				mails = append(mails, mailArray...)
 			}
@@ -165,18 +162,6 @@ func extractMailsFromFragments(text string) []Mail {
 	}
 
 	return mails
-}
-
-// filterValidMails removes mails with empty required fields
-func filterValidMails(mails []Mail) []Mail {
-	var valid []Mail
-	for _, mail := range mails {
-		if (mail.To != "" && mail.Body != "") || // for mail criteria
-			mail.Archived || mail.Solved || 0 < len(mail.Next) { // for commands
-			valid = append(valid, mail)
-		}
-	}
-	return valid
 }
 
 // shortenString truncates a string for logging
