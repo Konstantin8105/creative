@@ -14,4 +14,6 @@ type AIrunner interface {
 
 	// GetContextSize return context size
 	GetContextSize() int
+
+	Ask(request string, action func(response string) (stop bool)) (err error)
 }

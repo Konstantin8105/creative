@@ -151,9 +151,10 @@ func (o Ollama) send(endpoint string, isChat bool, messages []ChatMessage) (stri
 	return o.doRequest(endpoint, pr)
 }
 
-// steps defines number of additional chat iterations after initial response
-// Valid range: -1 (no additional steps) or positive integer
-var steps = 5
+// AmountMessages defines number of additional chat iterations after initial response
+// Valid range: -1 (no additional AmountMessages) or positive integer
+// Default: -1 (single response only)
+var AmountMessages = 2
 
 // Run executes multi-step dialogue with AI model
 // request: user input string, must be non-empty
@@ -181,15 +182,19 @@ var steps = 5
 //	}'
 //
 // ```
-func (o Ollama) Run(request string) (response []Mail, err error) {
+func (o Ollama) Ask(request string, action func(response string) (stop bool)) (err error) {
+	if action == nil {
+		return fmt.Errorf("action function is empty")
+	}
+
 	// Validate input
 	if request == "" {
-		return nil, fmt.Errorf("empty request")
+		return fmt.Errorf("empty request")
 	}
 
 	// Validate endpoint
 	if o.Endpoint == "" {
-		return nil, fmt.Errorf("empty endpoint")
+		return fmt.Errorf("empty endpoint")
 	}
 
 	var messages []ChatMessage
@@ -202,7 +207,7 @@ func (o Ollama) Run(request string) (response []Mail, err error) {
 	}
 
 	isChat := false
-	if 0 < steps {
+	if 0 < AmountMessages {
 		isChat = true
 		endpoint += "chat"
 	} else {
@@ -211,35 +216,44 @@ func (o Ollama) Run(request string) (response []Mail, err error) {
 
 	log.Printf("Ollama endpoint: %s", endpoint)
 	resp, err := o.send(endpoint, isChat, messages)
+	stop := action(resp)
 	if err != nil {
-		return nil, err
+		return
+	}
+	if stop {
+		return
 	}
 	messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-	{
-		ms, _ := ParseMails(resp) // ignore error
-		response = append(response, ms...)
-	}
 	log.Printf("Ollama first response: %s", resp)
 
 	// Execute additional steps if configured
 	// steps-1 because first response already obtained
-	for i := 0; i < steps-1; i++ {
+	for i := 0; i < AmountMessages-1; i++ {
 		messages = append(messages, ChatMessage{Role: "user", Content: AdditionMailChatText})
 		resp, err = o.send(endpoint, isChat, messages)
-		if err != nil {
-			return response, err // Return partial response on error
-		}
 		resp = strings.TrimSpace(resp)
+		stop := action(resp)
+		if err != nil {
+			return
+		}
 		if resp == "" {
 			break // Stop if empty response
 		}
+		if stop {
+			return
+		}
 		log.Printf("Ollama chat step %d response: %s", i, resp)
 		messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-		{
-			ms, _ := ParseMails(resp) // ignore error
-			response = append(response, ms...)
-		}
 	}
+	return
+}
+
+func (o Ollama) Run(request string) (response []Mail, err error) {
+	err = o.Ask(request, func(resp string) (stop bool) {
+		ms, _ := ParseMails(resp)
+		response = append(response, ms...)
+		return false
+	})
 	return
 }
 

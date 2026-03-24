@@ -202,15 +202,14 @@ func (r RouterAI) send(endpoint string, isChat bool, messages []ChatMessage) (st
 //	}'
 //
 // ```
-func (r RouterAI) Run(request string) (response []Mail, err error) {
-	// Validate input
-	if request == "" {
-		return nil, fmt.Errorf("empty request")
+func (r RouterAI) Ask(request string, action func(response string) (stop bool)) (err error) {
+	if action == nil {
+		return fmt.Errorf("action function is empty")
 	}
 
 	// Validate endpoint
 	if r.Endpoint == "" {
-		return nil, fmt.Errorf("empty endpoint")
+		return fmt.Errorf("empty endpoint")
 	}
 
 	var messages []ChatMessage
@@ -223,7 +222,7 @@ func (r RouterAI) Run(request string) (response []Mail, err error) {
 	}
 
 	isChat := false
-	if 0 < steps {
+	if 0 < AmountMessages {
 		isChat = true
 		endpoint += "chat/completions"
 	} else {
@@ -232,35 +231,44 @@ func (r RouterAI) Run(request string) (response []Mail, err error) {
 
 	log.Printf("RouterAI endpoint: %s", endpoint)
 	resp, err := r.send(endpoint, isChat, messages)
+	stop := action(resp)
 	if err != nil {
-		return nil, err
+		return
+	}
+	if stop {
+		return
 	}
 	messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-	{
-		ms, _ := ParseMails(resp) // ignore error
-		response = append(response, ms...)
-	}
 	log.Printf("RouterAI first response: %s", resp)
 
 	// Execute additional steps if configured
 	// steps-1 because first response already obtained
-	for i := 0; i < steps-1; i++ {
+	for i := 0; i < AmountMessages-1; i++ {
 		messages = append(messages, ChatMessage{Role: "user", Content: AdditionMailChatText})
 		resp, err = r.send(endpoint, isChat, messages)
-		if err != nil {
-			return response, err // Return partial response on error
-		}
 		resp = strings.TrimSpace(resp)
+		stop := action(resp)
+		if err != nil {
+			return
+		}
 		if resp == "" {
 			break // Stop if empty response
 		}
+		if stop {
+			return
+		}
 		log.Printf("RouterAI chat step %d response: %s", i, resp)
 		messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-		{
-			ms, _ := ParseMails(resp) // ignore error
-			response = append(response, ms...)
-		}
 	}
+	return
+}
+
+func (r RouterAI) Run(request string) (response []Mail, err error) {
+	err = r.Ask(request, func(resp string) (stop bool) {
+		ms, _ := ParseMails(resp)
+		response = append(response, ms...)
+		return false
+	})
 	return
 }
 
