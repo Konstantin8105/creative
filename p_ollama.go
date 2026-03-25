@@ -63,7 +63,7 @@ func (o Ollama) doRequest(endpoint string, body OllamaRequest) (string, error) {
 
 	// Set default timeout if not specified
 	if o.RequestTimeout == 0 {
-		o.RequestTimeout = 40 * time.Minute
+		o.RequestTimeout = 4 * time.Hour
 	}
 
 	jsonData, err := json.Marshal(body)
