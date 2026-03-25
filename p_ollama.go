@@ -250,7 +250,7 @@ func (o Ollama) Ask(request string, action func(response string) (stop bool)) (e
 
 func (o Ollama) Run(request string) (response []Mail, err error) {
 	err = o.Ask(request, func(resp string) (stop bool) {
-		ms, _ := ParseMails(resp)
+		ms, _ := ParseMails[Mail](resp)
 		response = append(response, ms...)
 		return false
 	})

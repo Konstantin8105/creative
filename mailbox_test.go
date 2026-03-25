@@ -60,7 +60,7 @@ func TestMailbox(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				mails, err := ParseMails(string(data))
+				mails, err := ParseMails[Mail](string(data))
 				if err != nil {
 					t.Fatal(err)
 				}

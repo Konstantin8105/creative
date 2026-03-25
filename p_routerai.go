@@ -265,7 +265,7 @@ func (r RouterAI) Ask(request string, action func(response string) (stop bool)) 
 
 func (r RouterAI) Run(request string) (response []Mail, err error) {
 	err = r.Ask(request, func(resp string) (stop bool) {
-		ms, _ := ParseMails(resp)
+		ms, _ := ParseMails[Mail](resp)
 		response = append(response, ms...)
 		return false
 	})
