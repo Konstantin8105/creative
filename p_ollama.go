@@ -34,7 +34,7 @@ type OllamaRequest struct {
 	Prompt    string                 `json:"prompt"`
 	Messages  []ChatMessage          `json:"messages,omitempty"`
 	Stream    bool                   `json:"stream"`
-	KeepAlive string                 `json:"keep_alive,omitempty"`
+	KeepAlive *time.Duration         `json:"keep_alive,omitempty"`
 	Options   map[string]interface{} `json:"options,omitempty"`
 }
 
@@ -132,14 +132,15 @@ func (o Ollama) send(endpoint string, isChat bool, messages []ChatMessage) (stri
 			"top_k":       40,      // Range: 1-100, top-k sampling
 			"num_predict": 3048,    // Maximum tokens to generate, positive integer
 			"num_ctx":     context, // Context window size
-			"keep_alive":  "60m",   // Avoid cold start
 		}
 	}
 
+	ka := time.Duration(60 * time.Minute)
 	pr := OllamaRequest{
-		Model:   o.Model,
-		Stream:  false,
-		Options: defaultOllamaOptions(o.ContextSize),
+		Model:     o.Model,
+		Stream:    false,
+		KeepAlive: &ka, // Avoid cold start
+		Options:   defaultOllamaOptions(o.ContextSize),
 	}
 	if isChat {
 		pr.Messages = messages
