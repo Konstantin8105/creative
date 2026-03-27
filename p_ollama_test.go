@@ -28,19 +28,18 @@ func TestOllama(t *testing.T) {
 		}
 		t.Logf("%s", agent.String())
 	})
-
 	return
 
 	// Для следующего теста нужен большая модель
-
+	prv.ContextSize = 20000
 	t.Run("agentmailbox", func(t *testing.T) {
 		var mb creative.MailBox
-		agent := creative.NewAgentMailBox(creative.Ollama(prv), "math", "Ты хорошо знаешь математику и на мои задачи отвечаешь только результат", &mb, creative.DefaultMailPermission())
+		agent := creative.NewAgentMailBox(creative.Ollama(prv), "math", "Ты хорошо знаешь математику и на твоя задача ответить только результатом, оформленным в виде письма даже если не знаешь отправителя. К примеру, если надо решить 12 + 3, то в ответном письме надо написать 15. А если надо решить 1 + 2, то в ответном письме надо написать 3.", &mb, creative.DefaultMailPermission())
 		agent.Init()
 		// answers
 		{
 			old := creative.MaxAgentIterations
-			creative.MaxAgentIterations = 2
+			creative.MaxAgentIterations = 20
 			defer func() {
 				creative.MaxAgentIterations = old
 			}()
@@ -61,5 +60,6 @@ func TestOllama(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Logf("%s", agent.String())
+		t.Logf("%s", mb)
 	})
 }
