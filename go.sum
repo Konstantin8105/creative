@@ -1,0 +1,8 @@
+github.com/Konstantin8105/compare v0.0.0-20250820105938-ead6c5082479 h1:BsjuTbTzu3QKkSXgBJqDOQXA3Y+dU9GVPCfU64y9xXA=
+github.com/Konstantin8105/compare v0.0.0-20250820105938-ead6c5082479/go.mod h1:Nut8iDdnx8+BObLmyXRP9ZwUFs1b/Te3BiF4CsuUuIk=
+github.com/Konstantin8105/errors v0.1.0 h1:YlF98T37IPvBGzxbj6AhXrY4VdoFfW60KEibUOtOpkg=
+github.com/Konstantin8105/errors v0.1.0/go.mod h1:cKK/HtcfxJFe1RvnGzhWl8jcZpnTqZjKwvMBUrLsis4=
+github.com/Konstantin8105/tree v0.1.0 h1:4zHm0vfnQCNlXqv4I00R5LoXz8HEeWk7BwvNgjnl6Sg=
+github.com/Konstantin8105/tree v0.1.0/go.mod h1:/KrCn6rMgf1uoXUY2HjVvML1LeLUULD1BDiHWJhJwII=
+github.com/olegfedoseev/image-diff v0.0.0-20171116094004-897a4e73dfd6 h1:a/kynVgbdXJQDq3WWTgwL0bHyg4hu4/oIK9UB+Ugvfo=
+github.com/olegfedoseev/image-diff v0.0.0-20171116094004-897a4e73dfd6/go.mod h1:OgMVaRcJ1TgmPHB/MF2YaHOzRxmw6vVG/DquoMhkCiY=

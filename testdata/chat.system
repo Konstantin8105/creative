@@ -1,0 +1,14 @@
+[
+  {
+    "role": "system",
+    "content": "info of agent system"
+  },
+  {
+    "role": "user",
+    "content": "Hello"
+  },
+  {
+    "role": "assistant",
+    "content": "My name"
+  }
+]

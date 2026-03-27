@@ -57,8 +57,8 @@ type Mail struct {
 	To       string   `json:"to"`
 	Body     string   `json:"body"`
 	Archived bool     `json:"archived"`
-	Solved   bool     `json:"solved"`
-	Next     []string `json:"next"` // TODO add implementation
+	Solved   bool     `json:"solved"` // TODO remove
+	Next     []string `json:"next"`   // TODO add implementation
 	ReplyID  int      // -1 for new threads, ID of parent mail for replies
 }
 
@@ -181,6 +181,14 @@ var MailBoxPrompt Prompt
 type MailBox struct {
 	presentID int    // Next available mail ID
 	mails     []Mail // All mail messages
+}
+
+func (mb MailBox) String() string {
+	data, err := json.MarshalIndent(mb.mails, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
 }
 
 // Get loads mails from a JSON file

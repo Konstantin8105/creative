@@ -1,0 +1,30 @@
+[
+  {
+    "role": "system",
+    "content": "info of agent system"
+  },
+  {
+    "role": "user",
+    "content": "IN:QWE"
+  },
+  {
+    "role": "assistant",
+    "content": "OUT:QWE"
+  },
+  {
+    "role": "user",
+    "content": "IN:WER"
+  },
+  {
+    "role": "assistant",
+    "content": "OUT:WER"
+  },
+  {
+    "role": "user",
+    "content": "IN:ERT"
+  },
+  {
+    "role": "assistant",
+    "content": "OUT:ERT"
+  }
+]

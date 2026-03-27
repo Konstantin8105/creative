@@ -55,21 +55,21 @@ func main() {
 	}
 
 	// Initialize AI provider with configuration
-	pr := creative.Provider{
+	prv := creative.Provider{
 		Endpoint:       *endpoint,
 		Model:          *model,
 		Key:            *key,
 		RequestTimeout: *timeout,
 		ContextSize:    *contextSize,
 	}
-	if *ollama {
-		creative.AI = new(creative.Ollama(pr))
-	} else {
-		creative.AI = new(creative.RouterAI(pr))
-	}
 
 	// Create agent network
-	var ntw creative.AgentNetwork
+	var ntw *creative.MailNetwork
+	if *ollama {
+		ntw = creative.NewMailNetwork(creative.Ollama(prv))
+	} else {
+		ntw = creative.NewMailNetwork(creative.RouterAI(prv))
+	}
 
 	// Add agents from definition files
 	// ntw.AddAgent(filepath.Join("agent", "architect.md"))
@@ -94,9 +94,11 @@ func main() {
 	// }
 	// ntw.Links = [][]string{{"architect", "ender"}}
 
-	ntw.AddAgent(filepath.Join("agent", "operator.md"))
-	ntw.AddAgent(filepath.Join("agent", "tester.md"))
-	ntw.Links = [][]string{{"operator", "tester"}}
+	ntw.AddAgent(filepath.Join("agent", "operator.md"), creative.DefaultMailPermission())
+	mp := creative.DefaultMailPermission()
+	mp.Solved.Other = true
+	ntw.AddAgent(filepath.Join("agent", "tester.md"), mp)
+	ntw.AddLinks([]string{"operator", "tester"})
 
 	// Read task from input file
 	data, err := os.ReadFile(*inputFile)
@@ -110,16 +112,14 @@ func main() {
 	}
 
 	// Configure global parameters
-	creative.MaxIterations = 2000
+	MaxIterations := 2000
 	creative.ReloadMailbox = *reloadMailbox
 
 	// Run the agent network
-	output, err := ntw.Run(input)
+	ntw.AddSystem(input)
+	err = ntw.Run(MaxIterations)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-
-	// Output results
-	fmt.Fprintf(os.Stdout, "%s\n", output)
 }

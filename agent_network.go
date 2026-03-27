@@ -1,6 +1,7 @@
 package creative
 
 import (
+	"bytes"
 	"embed"
 	_ "embed"
 	"fmt"
@@ -13,35 +14,47 @@ import (
 	"strings"
 )
 
+// ConflictPrompt contains the prompt template for conflict solving
+//
+//go:embed conflict.md
+var ConflictPrompt Prompt
+
 // Global configuration variables
 var (
-	MaxIterations = 3             // Maximum number of agent runs per iteration
 	MailBoxFile   = "mailbox.out" // Filename for default mailbox storage
 	ReloadMailbox bool            // Whether to reload mailbox from file on startup
 )
 
-//go:embed agent/*
-var agentFS embed.FS
+func NewMailNetwork(ai AIrunner) *MailNetwork {
+	mn := new(MailNetwork)
+	mn.ai = ai
+	return mn
+}
 
-// AgentNetwork manages connections between agents and coordinates their execution
+// MailNetwork manages connections between agents and coordinates their execution
 // Valid ranges:
 //   - Agents: non-empty slice of Agent structs
 //   - Links: 2D slice where each inner slice represents a fully connected group
-type AgentNetwork struct {
+type MailNetwork struct {
+	ai     AIrunner
+	system []string
 	// Agents list in network
-	Agents []Agent
+	agents []*AgentMailBox
 	// Links defines fully connected agent groups
 	// Principle: "If you can send to me, then I can send to you"
 	// Each inner slice represents agents that can communicate with each other
-	Links [][]string
+	links [][]string
 	// hidden mailbox for internal message storage
 	mailbox MailBox
 }
 
+//go:embed agent/*
+var agentFS embed.FS
+
 // AddAgent loads an agent definition from file and adds it to the network
 // filename: path to agent definition file (e.g., "agent/dreamer.md")
 // The agent name is derived from the filename without extension
-func (an *AgentNetwork) AddAgent(filename string) {
+func (an *MailNetwork) AddAgent(filename string, mp MailBoxPermission) {
 	add := func(filename string, body string) {
 		name := filename
 		{
@@ -53,10 +66,9 @@ func (an *AgentNetwork) AddAgent(filename string) {
 				name = name[:index]
 			}
 		}
-		an.Agents = append(an.Agents, Agent{
-			Name: name,
-			Role: Prompt(body),
-		})
+		an.agents = append(an.agents,
+			NewAgentMailBox(an.ai, name, Prompt(body), &an.mailbox, mp),
+		)
 	}
 	// Check embedded file system first
 	bodyEmbed, errEmbed := agentFS.ReadFile(filename)
@@ -74,46 +86,38 @@ func (an *AgentNetwork) AddAgent(filename string) {
 	panic(fmt.Errorf("agent file not found: `%s`", filename))
 }
 
+func (an *MailNetwork) AddLinks(links []string) {
+	if len(links) == 0 {
+		panic("empty links")
+	}
+	for i := range links {
+		if links[i] != strings.TrimSpace(links[i]) {
+			panic("extra spaces in name not acceptable")
+		}
+		if links[i] == "" {
+			panic("empty links")
+		}
+	}
+	an.links = append(an.links, links)
+}
+
+func (an *MailNetwork) AddSystem(system ...string) {
+	an.system = append(an.system, system...)
+}
+
 // Run executes the agent network with given input task
 // input: global task description string, must be non-empty
 // Returns: aggregated output from all agents or error
-func (an *AgentNetwork) Run(input string) (output string, err error) {
-	// Validate input
-	if input == "" {
-		return "", fmt.Errorf("empty input task")
-	}
-
+func (an *MailNetwork) Run(MaxIterations int) (err error) {
 	// Check agent count
-	if len(an.Agents) == 0 {
-		return "", fmt.Errorf("empty agents list")
-	}
-
-	// Clean agent names and roles
-	for i := range an.Agents {
-		an.Agents[i].Name = strings.TrimSpace(an.Agents[i].Name)
-		an.Agents[i].Role = Prompt(strings.TrimSpace(string(an.Agents[i].Role)))
-	}
-
-	// Clean link names with bounds checking
-	for i := range an.Links {
-		for j := range an.Links[i] {
-			an.Links[i][j] = strings.TrimSpace(an.Links[i][j])
-		}
-	}
-
-	// Validate network agents
-	for _, a := range an.Agents {
-		if a.Name == "" {
-			return "", fmt.Errorf("agent with empty name")
-		}
-		if a.Role == "" {
-			return "", fmt.Errorf("agent `%s` with empty role", a.Name)
-		}
+	if len(an.agents) == 0 {
+		err = fmt.Errorf("empty agents list")
+		return
 	}
 
 	// Sort each link group for consistent processing
-	for i := range an.Links {
-		sort.Strings(an.Links[i])
+	for i := range an.links {
+		sort.Strings(an.links[i])
 	}
 
 	// Validate network topology
@@ -121,13 +125,14 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 	{
 		// Check for duplicate agent names
 		var allAgentNames []string
-		for _, a := range an.Agents {
-			allAgentNames = append(allAgentNames, a.Name)
+		for _, a := range an.agents {
+			allAgentNames = append(allAgentNames, a.internal.name)
 		}
 		sort.Strings(allAgentNames)
 		for i := 1; i < len(allAgentNames); i++ {
 			if allAgentNames[i-1] == allAgentNames[i] {
-				return "", fmt.Errorf("duplicate agent names: `%s`", allAgentNames[i])
+				err = fmt.Errorf("duplicate agent names: `%s`", allAgentNames[i])
+				return
 			}
 		}
 
@@ -142,38 +147,41 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 		}
 
 		// Check all agents in links exist
-		for _, linkGroup := range an.Links {
+		for _, linkGroup := range an.links {
 			for _, agentName := range linkGroup {
 				if !validAgentName(agentName) {
-					return "", fmt.Errorf("agent `%s` does not exist in link group: `%s`",
+					err = fmt.Errorf("agent `%s` does not exist in link group: `%s`",
 						agentName, strings.Join(linkGroup, ","))
+					return
 				}
 			}
 		}
 
 		// Check for duplicate agents within link groups
-		for _, linkGroup := range an.Links {
+		for _, linkGroup := range an.links {
 			for i := 1; i < len(linkGroup); i++ {
 				if linkGroup[i-1] == linkGroup[i] {
-					return "", fmt.Errorf("duplicate agent `%s` in link group `%s`",
+					err = fmt.Errorf("duplicate agent `%s` in link group `%s`",
 						linkGroup[i], strings.Join(linkGroup, ","))
+					return
 				}
 			}
 		}
 
 		// Check all agents have at least one link
 		hasLinks := make(map[string]bool)
-		for _, a := range an.Agents {
-			hasLinks[a.Name] = false
+		for _, a := range an.agents {
+			hasLinks[a.internal.name] = false
 		}
-		for _, linkGroup := range an.Links {
+		for _, linkGroup := range an.links {
 			for _, agentName := range linkGroup {
 				hasLinks[agentName] = true
 			}
 		}
 		for agentName, linked := range hasLinks {
 			if !linked {
-				return "", fmt.Errorf("agent `%s` has no links", agentName)
+				err = fmt.Errorf("agent `%s` has no links", agentName)
+				return
 			}
 		}
 	}
@@ -188,47 +196,49 @@ func (an *AgentNetwork) Run(input string) (output string, err error) {
 				continue
 			}
 			// self-note to any agent
-			name := an.Agents[rand.Intn(len(an.Agents))].Name
+			name := an.agents[rand.Intn(len(an.agents))].internal.name
 			log.Printf("Change to `%s` in email: %s", name, mails[i])
 			mails[i].To = name
 			mails[i].From = name
 		}
 		an.mailbox.Add(mails, true)
-		output = an.mailbox.GetSolved()
-	}
-
-	// Load colleagues for each agent
-	for i := range an.Agents {
-		an.Agents[i].other = an.getColleagues(an.Agents[i].Name)
 	}
 
 	// Run agent iterations
 	for iter := 0; iter < MaxIterations; iter++ {
-		for _, agent := range an.Agents {
-			mails := agent.Run(input, output, an.mailbox.GetThreads(agent.Name), AI.GetContextSize())
-			// if field `to` is not not valid then take from `from`
-			for i := range mails {
-				if validAgentName(mails[i].To) {
-					continue
+		for _, agent := range an.agents {
+			agent.internal.Reset()
+			agent.Init()
+			// Add colleague descriptions
+			for _, c := range an.getColleagues(agent.internal.name) {
+				if c.internal.name == agent.internal.name {
+					continue // Skip self-reference
 				}
-				mails[i].To = mails[i].From
+				var buf bytes.Buffer
+				fmt.Fprintf(&buf, "Описание роли твоего коллеги по имени: `%s`\n", c.internal.name)
+				fmt.Fprintf(&buf, "%s\n", string(c.internal.role))
+				fmt.Fprintf(&buf, "Окончание описания роли `%s`\n", c.internal.name)
+				fmt.Fprintf(&buf, "\n")
+				agent.internal.AddSystem(buf.String())
 			}
-			an.mailbox.Add(mails, false)
-			output = an.mailbox.GetSolved()
+			// Add conflict prompt
+			agent.internal.AddSystem(string(ConflictPrompt))
+			// run
+			err = agent.Run()
+			if err != nil {
+				return
+			}
 			an.mailbox.Save(MailBoxFile) // Save intermediate mailbox state
 		}
 	}
-
-	// Append remaining mail threads to output
-	output += an.mailbox.GetThreads("")
 	return
 }
 
 // getColleagues returns all colleagues for a given agent
 // name: agent name to find colleagues for
 // Returns: slice of Agent structs representing colleagues
-func (an AgentNetwork) getColleagues(name string) (agents []Agent) {
-	for _, linkGroup := range an.Links {
+func (an MailNetwork) getColleagues(name string) (agents []*AgentMailBox) {
+	for _, linkGroup := range an.links {
 		if !slices.Contains(linkGroup, name) {
 			continue
 		}
@@ -245,43 +255,11 @@ func (an AgentNetwork) getColleagues(name string) (agents []Agent) {
 // getAgentByName finds an agent by name in the network
 // name: agent name to search for
 // Returns: Agent struct or panics if not found
-func (an AgentNetwork) getAgentByName(name string) Agent {
-	for i := range an.Agents {
-		if an.Agents[i].Name == name {
-			return an.Agents[i]
+func (an MailNetwork) getAgentByName(name string) *AgentMailBox {
+	for i := range an.agents {
+		if an.agents[i].internal.name == name {
+			return an.agents[i]
 		}
 	}
 	panic(fmt.Errorf("agent not found: `%s`", name))
 }
-
-// CanSend проверяет, может ли агент from отправить сообщение агенту to
-// func (an *AgentNetwork) CanSend(from, to string) bool {
-// 	for _, conn := range an.connections {
-// 		if conn[0] == from && conn[1] == to {
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
-
-// FilterColleagues возвращает отфильтрованный список коллег для указанного агента
-// В список включаются только те агенты, которым можно отправлять сообщения
-// func (an *AgentNetwork) FilterColleagues(agentName string, allAgents []Agent) []Agent {
-// 	var filtered []Agent
-// 	for _, agent := range allAgents {
-// 		if agent.Name == agentName {
-// 			continue // пропускаем самого себя
-// 		}
-// 		if an.CanSend(agentName, agent.Name) {
-// 			filtered = append(filtered, agent)
-// 		}
-// 	}
-// 	return filtered
-// }
-
-// GetAllConnections возвращает все установленные связи
-//
-//	func (an *AgentNetwork) GetAllConnections() []link {
-//		return an.connections
-//	}
-//

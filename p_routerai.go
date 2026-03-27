@@ -3,6 +3,7 @@ package creative
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -22,131 +23,69 @@ func (pr RouterAI) GetContextSize() int {
 	return pr.ContextSize
 }
 
-// RouterAIRequest represents request structure for RouterAI API chat completions
-// Valid ranges:
-//   - Model: non-empty string, identifier of the model (see https://routerai.ru/models)
-//   - Messages: array of chat messages, required for chat completions
-//   - Prompt: string, required for completions endpoint
-//   - Stream: boolean, default false
-//   - Temperature: float value from 0 to 2, controls randomness
-//   - MaxTokens: positive integer, maximum tokens to generate (optional)
-//   - TopP: float value from 0 to 1, nucleus sampling parameter (optional)
-//   - FrequencyPenalty: float value from -2 to 2, penalty for frequent tokens (optional)
-//   - PresencePenalty: float value from -2 to 2, penalty for new tokens (optional)
-type RouterAIRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages,omitempty"`
-	Prompt      string        `json:"prompt,omitempty"`
-	Stream      bool          `json:"stream,omitempty"`
-	Temperature float64       `json:"temperature,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	TopP        float64       `json:"top_p,omitempty"`
-	// FrequencyPenalty float64       `json:"frequency_penalty,omitempty"`
-	// PresencePenalty  float64       `json:"presence_penalty,omitempty"`
-}
-
-// RouterAIResponse represents response structure from RouterAI API
-// Follows OpenAI-compatible response format
-type RouterAIResponse struct {
-	ID string `json:"id"`
-	// Object  string `json:"object"`
-	// Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-		// FinishReason string `json:"finish_reason"`
-		// Index        int    `json:"index"`
-	} `json:"choices"`
-	// Usage struct {
-	// 	PromptTokens     int `json:"prompt_tokens"`
-	// 	CompletionTokens int `json:"completion_tokens"`
-	// 	TotalTokens      int `json:"total_tokens"`
-	// } `json:"usage,omitempty"`
-}
-
-// doRequest sends HTTP request to RouterAI API endpoint
-// endpoint: API endpoint URL, must be non-empty and valid
-// body: request payload
-// Returns: response string or error
-func (r RouterAI) doRequest(endpoint string, body RouterAIRequest) (string, error) {
+func (o RouterAI) Send(messages []ChatMessage, isChat bool) (repsonce string, err error) {
 	// Validate endpoint
-	if endpoint == "" {
-		return "", fmt.Errorf("empty endpoint URL")
+	if o.Endpoint == "" {
+		err = fmt.Errorf("empty endpoint")
+		return
 	}
-
-	// Set default timeout if not specified
-	if r.RequestTimeout == 0 {
-		r.RequestTimeout = 40 * time.Minute
-	}
-
-	jsonData, err := json.Marshal(body)
-	if err != nil {
-		return "", fmt.Errorf("marshal error: %w", err)
-	}
-
-	client := &http.Client{Timeout: r.RequestTimeout}
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("create request error: %w", err)
-	}
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-	if r.Key != "" {
-		// RouterAI uses Bearer token authentication
-		req.Header.Set("Authorization", "Bearer "+r.Key)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("http error: %w", err)
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read error: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status %d: %s", resp.StatusCode, string(data))
-	}
-
-	var rb RouterAIResponse
-	if err := json.Unmarshal(data, &rb); err != nil {
-		return "", fmt.Errorf("unmarshal error: %w", err)
-	}
-	if len(rb.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
-	}
-	return rb.Choices[0].Message.Content, nil
-}
-
-// send sends messages to RouterAI API endpoint
-// endpoint: API endpoint URL
-// isChat: true for chat completions endpoint, false for completions endpoint
-// messages: array of chat messages
-// Returns: response string or error
-func (r RouterAI) send(endpoint string, isChat bool, messages []ChatMessage) (string, error) {
 	// Validate model name
-	if r.Model == "" {
-		return "", fmt.Errorf("empty model name")
+	if o.Model == "" {
+		err = fmt.Errorf("empty model name")
+		return
+	}
+	// Set default timeout if not specified
+	if o.RequestTimeout == 0 {
+		o.RequestTimeout = 4 * time.Hour
+	}
+	// Validate context size
+	if o.ContextSize <= 0 {
+		o.ContextSize = 4096 // Default fallback
 	}
 
-	// Prepare request with default parameters
-	pr := RouterAIRequest{
-		Model:       r.Model,
+	endpoint := o.Endpoint
+	// Ensure endpoint ends with slash for path concatenation
+	if len(endpoint) > 0 && endpoint[len(endpoint)-1] != '/' {
+		endpoint += "/"
+	}
+	if isChat {
+		// endpoint += "chat"
+		endpoint += "chat/completions"
+	} else {
+		// endpoint += "generate"
+		endpoint += "completions"
+	}
+
+	log.Printf("RouterAI endpoint: %s", endpoint)
+
+	// RouterAIRequest represents request structure for RouterAI API chat completions
+	// Valid ranges:
+	//   - Model: non-empty string, identifier of the model (see https://routerai.ru/models)
+	//   - Messages: array of chat messages, required for chat completions
+	//   - Prompt: string, required for completions endpoint
+	//   - Stream: boolean, default false
+	//   - Temperature: float value from 0 to 2, controls randomness
+	//   - MaxTokens: positive integer, maximum tokens to generate (optional)
+	//   - TopP: float value from 0 to 1, nucleus sampling parameter (optional)
+	//   - FrequencyPenalty: float value from -2 to 2, penalty for frequent tokens (optional)
+	//   - PresencePenalty: float value from -2 to 2, penalty for new tokens (optional)
+	pr := struct {
+		Model       string        `json:"model"`
+		Messages    []ChatMessage `json:"messages,omitempty"`
+		Prompt      string        `json:"prompt,omitempty"`
+		Stream      bool          `json:"stream,omitempty"`
+		Temperature float64       `json:"temperature,omitempty"`
+		MaxTokens   int           `json:"max_tokens,omitempty"`
+		TopP        float64       `json:"top_p,omitempty"`
+		// FrequencyPenalty float64       `json:"frequency_penalty,omitempty"`
+		// PresencePenalty  float64       `json:"presence_penalty,omitempty"`
+	}{
+		Model:       o.Model,
 		Stream:      false,
 		Temperature: 0.7,
-		MaxTokens:   2048,
+		MaxTokens:   o.ContextSize,
 		TopP:        0.9,
 	}
-
-	// Add context size to max tokens if available
-	if 0 < r.ContextSize && r.ContextSize < pr.MaxTokens {
-		pr.MaxTokens = r.ContextSize
-	}
-
 	if isChat {
 		// Chat completions endpoint uses messages array
 		pr.Messages = messages
@@ -158,128 +97,115 @@ func (r RouterAI) send(endpoint string, isChat bool, messages []ChatMessage) (st
 		pr.Prompt = strings.TrimSpace(pr.Prompt)
 	}
 
-	return r.doRequest(endpoint, pr)
-}
+	// defaultOllamaOptions returns default generation parameters for AI models
+	// context: context window size in tokens, must be positive (typically 1000-200000)
+	// Returns: map with default generation options
+	// defaultOllamaOptions := func(context int) map[string]interface{} {
 
-// Run executes multi-step dialogue with AI model
-// request: user input string, must be non-empty
-// Returns: concatenated response string or error
-// Note: Uses chat completions endpoint if steps > 0, otherwise uses completions endpoint
-// In documentation:
-// For a chat-based interaction using the /v1/chat/completions endpoint:
-// ```bash
-//
-//	curl https://routerai.ru/api/v1/chat/completions \
-//	  --request POST \
-//	  --header 'Content-Type: application/json' \
-//	  --header 'Authorization: Bearer YOUR_SECRET_TOKEN' \
-//	  --data '{
-//	  "model": "deepseek/deepseek-chat-v3.1",
-//	  "messages": [
-//	    {
-//	      "role": "user",
-//	      "content": "Привет, как дела?"
-//	    }
-//	  ],
-//	  "stream": false,
-//	  "temperature": 1
-//	}'
-//
-// ```
-//
-// For prompt-based text generation using the /v1/completions endpoint:
-// ```bash
-//
-//	curl https://routerai.ru/api/v1/completions \
-//	  --request POST \
-//	  --header 'Content-Type: application/json' \
-//	  --header 'Authorization: Bearer YOUR_SECRET_TOKEN' \
-//	  --data '{
-//	  "model": "deepseek/deepseek-chat-v3.1",
-//	  "prompt": "Напиши короткий рассказ о космосе",
-//	  "stream": false,
-//	  "temperature": 0.7
-//	}'
-//
-// ```
-func (r RouterAI) Ask(request string, action func(response string) (stop bool)) (err error) {
-	if action == nil {
-		return fmt.Errorf("action function is empty")
-	}
+	// 	return map[string]interface{}{
+	// 		"temperature": 0.7,     // Range: 0.0-2.0, controls randomness
+	// 		"top_p":       0.9,     // Range: 0.0-1.0, nucleus sampling parameter
+	// 		"top_k":       40,      // Range: 1-100, top-k sampling
+	// 		"num_predict": 3048,    // Maximum tokens to generate, positive integer
+	// 		"num_ctx":     context, // Context window size
+	// 	}
+	// }
 
-	// Validate endpoint
-	if r.Endpoint == "" {
-		return fmt.Errorf("empty endpoint")
-	}
+	// ka := time.Duration(60 * time.Minute)
+	// pr := struct { // OllamaRequest
+	// 	Model     string                 `json:"model"`
+	// 	Prompt    string                 `json:"prompt"`
+	// 	Messages  []ChatMessage          `json:"messages,omitempty"`
+	// 	Stream    bool                   `json:"stream"`
+	// 	KeepAlive *time.Duration         `json:"keep_alive,omitempty"`
+	// 	Options   map[string]interface{} `json:"options,omitempty"`
+	// }{
+	// 	Model:     o.Model,
+	// 	Stream:    false,
+	// 	KeepAlive: &ka, // Avoid cold start
+	// 	Options:   defaultOllamaOptions(o.ContextSize),
+	// }
 
-	var messages []ChatMessage
-	messages = append(messages, ChatMessage{Role: "user", Content: request})
+	// if isChat {
+	// 	pr.Messages = messages
+	// } else {
+	// 	for _, m := range messages {
+	// 		pr.Prompt += m.Content + "\n"
+	// 	}
+	// }
 
-	endpoint := r.Endpoint
-	// Ensure endpoint ends with slash for path concatenation
-	if len(endpoint) > 0 && endpoint[len(endpoint)-1] != '/' {
-		endpoint += "/"
-	}
-
-	isChat := false
-	if 0 < AmountMessages {
-		isChat = true
-		endpoint += "chat/completions"
-	} else {
-		endpoint += "completions"
-	}
-
-	log.Printf("RouterAI endpoint: %s", endpoint)
-	resp, err := r.send(endpoint, isChat, messages)
-	stop := action(resp)
+	jsonData, err := json.Marshal(pr)
 	if err != nil {
+		err = fmt.Errorf("marshal error: %w", err)
 		return
 	}
-	if stop {
+
+	client := &http.Client{Timeout: o.RequestTimeout}
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		err = fmt.Errorf("create request error: %w", err)
 		return
 	}
-	messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
-	log.Printf("RouterAI first response: %s", resp)
-
-	// Execute additional steps if configured
-	// steps-1 because first response already obtained
-	for i := 0; i < AmountMessages-1; i++ {
-		messages = append(messages, ChatMessage{Role: "user", Content: AdditionMailChatText})
-		resp, err = r.send(endpoint, isChat, messages)
-		resp = strings.TrimSpace(resp)
-		stop := action(resp)
-		if err != nil {
-			return
-		}
-		if resp == "" {
-			break // Stop if empty response
-		}
-		if stop {
-			return
-		}
-		log.Printf("RouterAI chat step %d response: %s", i, resp)
-		messages = append(messages, ChatMessage{Role: "assistant", Content: resp})
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	if o.Key != "" {
+		// For OpenAI-compatible APIs, Bearer token is typically used
+		req.Header.Set("Authorization", "Bearer "+o.Key)
 	}
-	return
-}
+	resp, err := client.Do(req)
+	if err != nil {
+		err = fmt.Errorf("http error: %w", err)
+		return
+	}
+	log.Printf("RouterAI response: %v", resp)
+	defer func() {
+		errC := resp.Body.Close()
+		if errC != nil {
+			if err != nil {
+				err = errors.Join(err, errC)
+			} else {
+				err = errC
+			}
+		}
+	}()
 
-func (r RouterAI) Run(request string) (response []Mail, err error) {
-	err = r.Ask(request, func(resp string) (stop bool) {
-		ms, _ := ParseMails[Mail](resp)
-		response = append(response, ms...)
-		return false
-	})
-	return
-}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		err = fmt.Errorf("read error: %w", err)
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("status %d: %s", resp.StatusCode, string(data))
+		return
+	}
 
-/*
-// Example usage in main.go:
-// creative.AI = new(creative.RouterAI{
-//     Endpoint:       "https://routerai.ru/api/",
-//     Model:          "deepseek/deepseek-chat-v3.1",
-//     Key:            "your_api_key_here",
-//     RequestTimeout: 4 * time.Hour,
-//     KeepAlive:      "48h",
-//     ContextSize:    62000,
-// })
-*/
+	// RouterAIResponse represents response structure from RouterAI API
+	// Follows OpenAI-compatible response format
+	rb := struct {
+		ID string `json:"id"`
+		// Object  string `json:"object"`
+		// Created int64  `json:"created"`
+		Model   string `json:"model"`
+		Choices []struct {
+			Message struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"message"`
+			// FinishReason string `json:"finish_reason"`
+			// Index        int    `json:"index"`
+		} `json:"choices"`
+		// Usage struct {
+		// 	PromptTokens     int `json:"prompt_tokens"`
+		// 	CompletionTokens int `json:"completion_tokens"`
+		// 	TotalTokens      int `json:"total_tokens"`
+		// } `json:"usage,omitempty"`
+	}{}
+	if err = json.Unmarshal(data, &rb); err != nil {
+		err = fmt.Errorf("unmarshal error: %w", err)
+		return
+	}
+	if len(rb.Choices) == 0 {
+		return "", fmt.Errorf("no choices in response")
+	}
+	return rb.Choices[0].Message.Content, nil
+}
