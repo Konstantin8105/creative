@@ -54,7 +54,7 @@ func TestOllama(t *testing.T) {
 				To:   "math",
 				Body: "Реши и верни результат: 10 + 12 = ",
 			},
-		}, true)
+		}, true, "")
 		err := agent.Run()
 		if err != nil {
 			t.Fatal(err)

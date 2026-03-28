@@ -227,9 +227,17 @@ func (mb MailBox) Save(filename string) {
 
 // Add adds new mails to the mailbox, assigning IDs and managing threads
 // mails: slice of Mail objects to add
-func (mb *MailBox) Add(mails []Mail, addAll bool) {
+func (mb *MailBox) Add(mails []Mail, addAll bool, defaultAgentName string) {
 	if len(mails) == 0 {
 		return
+	}
+	for i := range mails {
+		if mails[i].To == "" {
+			mails[i].To = defaultAgentName
+		}
+		if mails[i].From == "" {
+			mails[i].From = defaultAgentName
+		}
 	}
 	{
 		// solved

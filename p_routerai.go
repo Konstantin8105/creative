@@ -174,6 +174,7 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool) (repsonce string, er
 		err = fmt.Errorf("read error: %w", err)
 		return
 	}
+	log.Printf("RouterAI response data: %s", string(data))
 	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf("status %d: %s", resp.StatusCode, string(data))
 		return

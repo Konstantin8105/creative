@@ -201,11 +201,11 @@ func (an *MailNetwork) Run(MaxIterations int) (err error) {
 			mails[i].To = name
 			mails[i].From = name
 		}
-		an.mailbox.Add(mails, true)
+		an.mailbox.Add(mails, true, an.agents[0].internal.name)
 	}
 
 	// Run agent iterations
-	for iter := 0; iter < MaxIterations; iter++ {
+	for range MaxIterations {
 		for _, agent := range an.agents {
 			agent.internal.Reset()
 			agent.Init()

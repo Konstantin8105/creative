@@ -245,7 +245,7 @@ func (a *AgentMailBox) Run() (err error) {
 		if err != nil {
 			return err
 		}
-		a.mb.mails = append(a.mb.mails, ms...)
+		a.mb.Add(ms, true, a.internal.name)
 		return nil
 	}
 	r, err := a.internal.chat.Send(a.internal.name, input, true)
