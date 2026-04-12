@@ -11,7 +11,7 @@ var MaxAgentIterations = 10
 
 // TODO
 const (
-	ContinueDisscussion Prompt = "Продолжай"
+	ContinueDisscussion Prompt = "Продолжай. Дополни."
 	FinishDisscussion   Prompt = "Пока писать нечего и работа агента закончена"
 )
 

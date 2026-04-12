@@ -18,10 +18,17 @@ type TestAi struct {
 
 	resp string
 	err  error
+
+	models       string
+	error_models error
 }
 
 func (ai TestAi) GetContextSize() int {
 	return ai.context
+}
+
+func (ai TestAi) GetModels() (string, error) {
+	return ai.models, ai.error_models
 }
 
 func (ai *TestAi) Send(chs []creative.ChatMessage, isChat bool) (repsonce string, err error) {
