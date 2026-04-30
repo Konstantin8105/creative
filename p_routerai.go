@@ -202,6 +202,7 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool) (repsonce string, er
 		// Created int64  `json:"created"`
 		Model   string `json:"model"`
 		Choices []struct {
+			Text    string `json:"text"`
 			Message struct {
 				Role    string `json:"role"`
 				Content string `json:"content"`
@@ -222,5 +223,8 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool) (repsonce string, er
 	if len(rb.Choices) == 0 {
 		return "", fmt.Errorf("no choices in response")
 	}
-	return rb.Choices[0].Message.Content, nil
+	if isChat {
+		return rb.Choices[0].Message.Content, nil
+	}
+	return rb.Choices[0].Text, nil
 }
