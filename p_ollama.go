@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 )
@@ -76,7 +75,7 @@ func (o Ollama) Send(messages []ChatMessage, isChat bool) (repsonce string, err 
 		endpoint += "generate"
 	}
 
-	log.Printf("Ollama endpoint: %s", endpoint)
+	// log.Printf("Ollama endpoint: %s", endpoint)
 
 	// defaultOllamaOptions returns default generation parameters for AI models
 	// context: context window size in tokens, must be positive (typically 1000-200000)
@@ -142,7 +141,7 @@ func (o Ollama) Send(messages []ChatMessage, isChat bool) (repsonce string, err 
 		err = fmt.Errorf("http error: %w", err)
 		return
 	}
-	log.Printf("Ollama response: %v", resp)
+	// log.Printf("Ollama response: %v", resp)
 	defer func() {
 		errC := resp.Body.Close()
 		if errC != nil {
@@ -159,7 +158,7 @@ func (o Ollama) Send(messages []ChatMessage, isChat bool) (repsonce string, err 
 		err = fmt.Errorf("read error: %w", err)
 		return
 	}
-	log.Printf("Ollama response body: %s", string(data))
+	// log.Printf("Ollama response body: %s", string(data))
 	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf("status %d: %s", resp.StatusCode, string(data))
 		return

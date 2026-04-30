@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -56,7 +55,7 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool) (repsonce string, er
 		endpoint += "completions"
 	}
 
-	log.Printf("RouterAI endpoint: %s", endpoint)
+	// log.Printf("RouterAI endpoint: %s", endpoint)
 
 	// RouterAIRequest represents request structure for RouterAI API chat completions
 	// Valid ranges:
@@ -157,7 +156,7 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool) (repsonce string, er
 		err = fmt.Errorf("http error: %w", err)
 		return
 	}
-	log.Printf("RouterAI response: %v", resp)
+	// log.Printf("RouterAI response: %v", resp)
 	defer func() {
 		errC := resp.Body.Close()
 		if errC != nil {
@@ -174,7 +173,7 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool) (repsonce string, er
 		err = fmt.Errorf("read error: %w", err)
 		return
 	}
-	log.Printf("RouterAI response data: %s", string(data))
+	// log.Printf("RouterAI response data: %s", string(data))
 	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf("status %d: %s", resp.StatusCode, string(data))
 		return
