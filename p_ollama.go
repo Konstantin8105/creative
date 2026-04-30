@@ -20,6 +20,21 @@ func (pr Ollama) GetContextSize() int {
 	return pr.ContextSize
 }
 
+func (o Ollama) GetModels() (out string, err error) {
+	endpoint := o.Endpoint + "/models"
+	resp, err := http.Get(endpoint)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	out = string(body)
+	return
+}
+
 // ChatMessage represents a single message in chat conversation
 type ChatMessage struct {
 	Role    string `json:"role"`    // "user", "assistant", or "system"

@@ -22,6 +22,21 @@ func (pr RouterAI) GetContextSize() int {
 	return pr.ContextSize
 }
 
+func (o RouterAI) GetModels() (out string, err error) {
+	endpoint := o.Endpoint + "/models"
+	resp, err := http.Get(endpoint)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	out = string(body)
+	return
+}
+
 func (o RouterAI) Send(messages []ChatMessage, isChat bool) (repsonce string, err error) {
 	// Validate endpoint
 	if o.Endpoint == "" {

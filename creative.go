@@ -9,5 +9,7 @@ type AIrunner interface {
 	// GetContextSize return context size
 	GetContextSize() int
 
+	GetModels() (string, error)
+
 	Send(chs []ChatMessage, isChat bool) (repsonce string, err error)
 }
