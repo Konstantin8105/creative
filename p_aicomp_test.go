@@ -237,6 +237,29 @@ func TestLMStudio(t *testing.T) {
 		}
 	})
 
+	t.Run("ToolCall", func(t *testing.T) {
+		ch := creative.NewChat(&ai)
+		ch.SetTools(creative.DefaultTools())
+		ch.AddSystem(creative.ToolsPrompt(creative.DefaultTools()))
+
+		resp, err := ch.Send("", "Который сейчас час? Обязательно используй инструмент get_current_time через формат {{tool:get_current_time}}", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("ToolCall final response: %s", resp)
+		if resp == "" {
+			t.Error("empty response")
+		}
+
+		str := ch.String()
+		t.Logf("Chat messages: %s", str)
+		if strings.Contains(str, "Результат выполнения инструмента") {
+			t.Log("OK: tool get_current_time was called and result injected")
+		} else {
+			t.Error("Tool get_current_time was not called by the model")
+		}
+	})
+
 	t.Run("Agent", func(t *testing.T) {
 		// Agent test is slow with large models; skip unless model was explicitly set
 		if os.Getenv("CREATIVE_MODEL") == "" {
