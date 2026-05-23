@@ -161,3 +161,102 @@ func TestChatWithToolCall(t *testing.T) {
 		}
 	})
 }
+
+func TestExtractAllToolCalls(t *testing.T) {
+	t.Run("no_calls", func(t *testing.T) {
+		calls := creative.ExtractAllToolCalls("Hello world", 0)
+		if len(calls) != 0 {
+			t.Fatalf("expected 0 calls, got %d", len(calls))
+		}
+	})
+	t.Run("single", func(t *testing.T) {
+		calls := creative.ExtractAllToolCalls("Check {{tool:get_current_time}} now", 0)
+		if len(calls) != 1 {
+			t.Fatalf("expected 1 call, got %d", len(calls))
+		}
+		if calls[0].Name != "get_current_time" {
+			t.Fatalf("got name %q, want get_current_time", calls[0].Name)
+		}
+		if calls[0].Params != "" {
+			t.Fatalf("got params %q, want empty", calls[0].Params)
+		}
+		if calls[0].Raw != "{{tool:get_current_time}}" {
+			t.Fatalf("got raw %q, want {{tool:get_current_time}}", calls[0].Raw)
+		}
+	})
+	t.Run("multiple", func(t *testing.T) {
+		calls := creative.ExtractAllToolCalls("a{{tool:a x}}b{{tool:b y}}c{{tool:c z}}d", 0)
+		if len(calls) != 3 {
+			t.Fatalf("expected 3 calls, got %d", len(calls))
+		}
+		if calls[0].Name != "a" || calls[0].Params != "x" || calls[0].Raw != "{{tool:a x}}" {
+			t.Fatalf("call[0] = {%q %q %q}", calls[0].Name, calls[0].Params, calls[0].Raw)
+		}
+		if calls[1].Name != "b" || calls[1].Params != "y" || calls[1].Raw != "{{tool:b y}}" {
+			t.Fatalf("call[1] = {%q %q %q}", calls[1].Name, calls[1].Params, calls[1].Raw)
+		}
+		if calls[2].Name != "c" || calls[2].Params != "z" || calls[2].Raw != "{{tool:c z}}" {
+			t.Fatalf("call[2] = {%q %q %q}", calls[2].Name, calls[2].Params, calls[2].Raw)
+		}
+	})
+	t.Run("max_count", func(t *testing.T) {
+		calls := creative.ExtractAllToolCalls("{{tool:a}}{{tool:b}}{{tool:c}}{{tool:d}}", 2)
+		if len(calls) != 2 {
+			t.Fatalf("expected 2 calls (maxCount=2), got %d", len(calls))
+		}
+		if calls[0].Name != "a" || calls[1].Name != "b" {
+			t.Fatalf("expected [a,b], got [%s,%s]", calls[0].Name, calls[1].Name)
+		}
+	})
+	t.Run("incomplete_ignored", func(t *testing.T) {
+		calls := creative.ExtractAllToolCalls("{{tool:start}}{{tool:no_end", 0)
+		if len(calls) != 1 {
+			t.Fatalf("expected 1 call (second is incomplete), got %d", len(calls))
+		}
+		if calls[0].Name != "start" {
+			t.Fatalf("got name %q, want start", calls[0].Name)
+		}
+	})
+	t.Run("adjacent", func(t *testing.T) {
+		calls := creative.ExtractAllToolCalls("{{tool:a}}{{tool:b}}{{tool:c}}", 0)
+		if len(calls) != 3 {
+			t.Fatalf("expected 3 calls, got %d", len(calls))
+		}
+	})
+}
+
+func TestChatWithMultipleToolCalls(t *testing.T) {
+	t.Run("multiple_tool_calls_in_one_response", func(t *testing.T) {
+		// AI returns one response with 3 tool calls.
+		// All 3 should be extracted and executed in batch, then AI called once.
+		ai := TestAi{rs: []string{
+			"Time {{tool:get_current_time}} and {{tool:get_current_time}} again",
+			"All times are now known.",
+		}}
+		ch := creative.NewChat(&ai)
+		ch.SetTools(creative.DefaultTools())
+
+		resp, err := ch.Send("test", "What time is it multiple times?", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp != "All times are now known." {
+			t.Fatalf("got %q, want %q", resp, "All times are now known.")
+		}
+		// Verify all tool call markers were replaced
+		str := ch.String()
+		if strings.Contains(str, "{{tool:") {
+			t.Fatal("tool call markers should have been replaced")
+		}
+		// Verify there are 2 tool result messages (one per call)
+		count := strings.Count(str, "Результат выполнения инструмента")
+		if count != 2 {
+			t.Fatalf("expected 2 tool result messages, got %d", count)
+		}
+		// Verify AI was only called 3 times: initial Send + the batch follow-up = 3 total
+		// (not 4+ which would indicate per-call AI invocations)
+		if ai.counter != 2 {
+			t.Fatalf("expected AI counter 2 (initial send + batch follow-up), got %d", ai.counter)
+		}
+	})
+}

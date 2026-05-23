@@ -10,7 +10,7 @@ import (
 // MaxToolIterations is the maximum number of tool call iterations per send.
 var MaxToolIterations = 5
 
-// TODO
+// DebugAgentOutput controls whether agent chat state is written to .out files.
 var (
 	DebugAgentOutput = true
 )
@@ -82,31 +82,36 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 	if last.Role != "assistant" {
 		return last.Content, nil
 	}
-	name, params, found := ExtractToolCall(last.Content)
-	if !found {
+
+	// Extract ALL tool calls from the response in one pass (max MaxToolIterations)
+	calls := ExtractAllToolCalls(last.Content, MaxToolIterations)
+	if len(calls) == 0 {
 		return last.Content, nil
 	}
-	result, err := ExecuteTool(name, params, ch.Tools)
-	if err != nil {
-		return "", fmt.Errorf("tool execution error: %w", err)
+
+	// Replace markers and execute all tools
+	assistantIdx := len(ch.msgs) - 1 // index of the assistant message (before appending system messages)
+	content := last.Content
+	for _, call := range calls {
+		result, err := ExecuteTool(call.Name, call.Params, ch.Tools)
+		if err != nil {
+			return "", fmt.Errorf("tool execution error: %w", err)
+		}
+		content = strings.ReplaceAll(content, call.Raw, result)
+		ch.msgs = append(ch.msgs, ChatMessage{
+			Role:    "system",
+			Content: fmt.Sprintf("Результат выполнения инструмента `%s`: %s", call.Name, result),
+		})
 	}
-	callStr := BuildToolCallWithParams(name, params)
-	if params == "" {
-		callStr = BuildToolCall(name)
-	}
-	ch.msgs[len(ch.msgs)-1].Content = strings.ReplaceAll(last.Content, callStr, result)
-	ch.msgs = append(ch.msgs, ChatMessage{
-		Role:    "system",
-		Content: fmt.Sprintf("Результат выполнения инструмента `%s`: %s", name, result),
-	})
-	// Let the AI continue once with the tool result in context
+	ch.msgs[assistantIdx].Content = content
+
+	// Single AI call with all tool results in context
 	response, err := ch.prv.Send(ch.msgs, isChat)
 	if err != nil {
 		return "", err
 	}
 	response = strings.TrimSpace(response)
 	if response == "" {
-		// AI had nothing more to say; return the modified original response
 		return ch.msgs[len(ch.msgs)-2].Content, nil
 	}
 	ch.msgs = append(ch.msgs, ChatMessage{Role: "assistant", Content: response})

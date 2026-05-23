@@ -63,6 +63,44 @@ func BuildToolCall(name string) string {
 	return "{{tool:" + name + "}}"
 }
 
+// ExtractAllToolCalls finds ALL tool calls in text using format {{tool:name}} or {{tool:name params}}.
+// Returns them in order of appearance, limited to maxCount (0 = no limit).
+// Each call includes the full raw string for direct replacement.
+func ExtractAllToolCalls(text string, maxCount int) []struct {
+	Name   string
+	Params string
+	Raw    string
+} {
+	var calls []struct {
+		Name   string
+		Params string
+		Raw    string
+	}
+	remaining := text
+	prefix := "{{tool:"
+	for {
+		if maxCount > 0 && len(calls) >= maxCount {
+			break
+		}
+		name, params, found := ExtractToolCall(remaining)
+		if !found {
+			break
+		}
+		// Find the raw string for this call
+		start := strings.Index(remaining, prefix)
+		rest := remaining[start+len(prefix):]
+		end := strings.Index(rest, "}}")
+		raw := remaining[start : start+len(prefix)+end+2]
+		calls = append(calls, struct {
+			Name   string
+			Params string
+			Raw    string
+		}{Name: name, Params: params, Raw: raw})
+		remaining = remaining[start+len(prefix)+end+2:]
+	}
+	return calls
+}
+
 // BuildToolCallWithParams builds a tool call string with parameters.
 func BuildToolCallWithParams(name, params string) string {
 	return "{{tool:" + name + " " + params + "}}"
