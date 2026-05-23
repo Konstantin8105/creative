@@ -24,8 +24,7 @@ func main() {
 		help          = flag.Bool("help", false, "Show help")
 
 		// AI provider configuration flags
-		ollama      = flag.Bool("ollama", true, "If true, then use Ollama API. If false, then use OpenAI comparable API")
-		endpoint    = flag.String("endpoint", "http://localhost:11434/api/", "AI API endpoint (default: Ollama)")
+		endpoint    = flag.String("endpoint", "http://localhost:11434/v1/", "AI API endpoint (OpenAI-compatible)")
 		model       = flag.String("model", "gpt-oss:20b", "Model name for AI generation")
 		key         = flag.String("key", "", "API key for external provider (optional)")
 		timeout     = flag.Duration("timeout", 4*time.Hour, "Request timeout duration")
@@ -63,37 +62,10 @@ func main() {
 		ContextSize:    *contextSize,
 	}
 
-	// Create agent network
-	var ntw *creative.MailNetwork
-	if *ollama {
-		ntw = creative.NewMailNetwork(creative.Ollama(prv))
-	} else {
-		ntw = creative.NewMailNetwork(creative.RouterAI(prv))
-	}
+	// Create agent network with OpenAI-compatible provider
+	ntw := creative.NewMailNetwork(creative.RouterAI(prv))
 
 	// Add agents from definition files
-	// ntw.AddAgent(filepath.Join("agent", "architect.md"))
-	// ntw.AddAgent(filepath.Join("agent", "coordinator.md"))
-	// ntw.AddAgent(filepath.Join("agent", "integrator.md"))
-	// ntw.AddAgent(filepath.Join("agent", "ender.md"))
-	// ntw.AddAgent(filepath.Join("agent", "dreamer.md"))
-	// ntw.AddAgent(filepath.Join("agent", "realist.md"))
-	// ntw.AddAgent(filepath.Join("agent", "critic.md"))
-	// ntw.AddAgent(filepath.Join("agent", "arxiv.md"))
-	// ntw.AddAgent(filepath.Join("agent", "solver.md"))
-
-	// Define communication links between agents
-	// Each inner array represents a fully connected group
-	// ntw.Links = [][]string{{"dreamer", "realist", "critic"}}
-	// ntw.Links = [][]string{{"architect", "dreamer", "realist", "critic"}}
-	// ntw.Links = [][]string{
-	// 	{"architect", "coordinator"},
-	// 	{"coordinator", "integrator"},
-	// 	{"integrator", "ender"},
-	// 	{"ender", "architect"},
-	// }
-	// ntw.Links = [][]string{{"architect", "ender"}}
-
 	ntw.AddAgent(filepath.Join("agent", "operator.md"), creative.DefaultMailPermission())
 	mp := creative.DefaultMailPermission()
 	mp.Solved.Other = true

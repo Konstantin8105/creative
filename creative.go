@@ -12,4 +12,9 @@ type AIrunner interface {
 	GetModels() (string, error)
 
 	Send(chs []ChatMessage, isChat bool) (repsonce string, err error)
+
+	// SendStream sends messages with streaming support.
+	// callback is called for each chunk of generated text.
+	// Returns the complete assembled response.
+	SendStream(chs []ChatMessage, isChat bool, callback func(chunk string)) (repsonce string, err error)
 }

@@ -1,24 +1,22 @@
 package creative_test
 
 import (
-	"fmt"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Konstantin8105/creative"
 )
 
+// ---------------------------------------------------------------------------
+// Unit tests with mock
+// ---------------------------------------------------------------------------
+
 func TestAiComp(t *testing.T) {
-	prv := creative.Provider{
-		Endpoint:       "http://127.0.0.1:1234/v1",
-		Model:          "qwen3:0.6b",
-		Key:            "",
-		RequestTimeout: 10 * time.Minute,
-		ContextSize:    2000,
-	}
 	t.Run("models", func(t *testing.T) {
-		aic := creative.RouterAI(prv)
-		out, err := aic.GetModels()
+		ai := TestAi{models: "gpt-4, gpt-3.5"}
+		out, err := ai.GetModels()
 		if err != nil {
 			t.Error(err)
 		}
@@ -26,10 +24,15 @@ func TestAiComp(t *testing.T) {
 	})
 	t.Run("chat", func(t *testing.T) {
 		for _, isChat := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%v", isChat), func(t *testing.T) {
-				aic := creative.RouterAI(prv)
-				out, err := aic.Send([]creative.ChatMessage{
-					{Role: "system", Content: "You the best math teacher and return only result of math opertions"},
+			t.Run(func() string {
+				if isChat {
+					return "chat"
+				}
+				return "generate"
+			}(), func(t *testing.T) {
+				ai := TestAi{resp: "42"}
+				out, err := ai.Send([]creative.ChatMessage{
+					{Role: "system", Content: "You the best math teacher"},
 					{Role: "assistant", Content: "1+1 = ?"},
 				}, isChat)
 				if err != nil {
@@ -39,18 +42,238 @@ func TestAiComp(t *testing.T) {
 			})
 		}
 	})
-	t.Run("agent", func(t *testing.T) {
-		agent := creative.NewAgent(creative.RouterAI(prv), "math", "Ты хорошо знаешь математику и на мои задачи отвечаешь только результат")
+	t.Run("Agent", func(t *testing.T) {
+		ai := TestAi{rs: []string{
+			"7",
+			"22",
+			string(creative.FinishDisscussion),
+		}}
+		agent := creative.NewAgent(&ai, "math", "Ты хорошо знаешь математику")
 		agent.Init()
-		// answers
-		for is, s := range []string{"4 + 3 =", "10 + 12 ="} {
-			r, err := agent.Send(s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Logf("%d: %s", is, r)
+		r, err := agent.Send("4 + 3 =")
+		if err != nil {
+			t.Fatal(err)
 		}
+		t.Logf("response: %s", r)
+
+		// Reset mock for second call
+		ai.counter = 0
+		ai.rs = []string{
+			"7",
+			"22",
+			string(creative.FinishDisscussion),
+		}
+		r, err = agent.Send("10 + 12 =")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("response: %s", r)
 		t.Logf("%s", agent.String())
 	})
-	return
+	t.Run("SendStream", func(t *testing.T) {
+		ai := TestAi{rs: []string{"Hello", " ", "World", "!"}}
+		out, err := ai.SendStream(nil, true, func(chunk string) {
+			t.Logf("chunk: %s", chunk)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := "Hello World!"
+		if out != expected {
+			t.Errorf("got %q, want %q", out, expected)
+		}
+	})
+	t.Run("SendStream_empty", func(t *testing.T) {
+		ai := TestAi{resp: "single response"}
+		var chunks []string
+		out, err := ai.SendStream(nil, true, func(chunk string) {
+			chunks = append(chunks, chunk)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != "single response" {
+			t.Errorf("got %q, want %q", out, "single response")
+		}
+		if len(chunks) != 1 || chunks[0] != "single response" {
+			t.Errorf("chunks: got %v, want [single response]", chunks)
+		}
+	})
+	t.Run("RouterAI_type", func(t *testing.T) {
+		var _ creative.AIrunner = creative.RouterAI{}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Integration tests with LM Studio / OpenAI-compatible server
+//
+// Default model: openai/gpt-oss-20b
+// Override with CREATIVE_MODEL environment variable.
+// If the model is not found in the server model list, test is skipped.
+//
+// Usage:
+//   go test -v -run TestLMStudio                                # uses openai/gpt-oss-20b
+//   CREATIVE_MODEL="qwen/qwen2.5-coder-14b" go test -v -run TestLMStudio
+//
+// Environment variables:
+//   CREATIVE_ENDPOINT - API endpoint (default: http://127.0.0.1:1234/v1)
+//   CREATIVE_MODEL    - model name (default: openai/gpt-oss-20b)
+//   CREATIVE_KEY      - API key (optional)
+// ---------------------------------------------------------------------------
+
+func TestLMStudio(t *testing.T) {
+	// Configuration from environment or defaults
+	endpoint := os.Getenv("CREATIVE_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "http://127.0.0.1:1234/v1"
+	}
+	modelName := os.Getenv("CREATIVE_MODEL")
+	if modelName == "" {
+		modelName = "openai/gpt-oss-20b"
+	}
+	apiKey := os.Getenv("CREATIVE_KEY")
+
+	t.Logf("Endpoint: %s", endpoint)
+	t.Logf("Model:   %s", modelName)
+
+	prv := creative.Provider{
+		Endpoint:       endpoint,
+		Model:          "",
+		Key:            apiKey,
+		RequestTimeout: 5 * time.Minute,
+		ContextSize:    4096,
+	}
+
+	// Check if server is reachable and model is available
+	ai := creative.RouterAI(prv)
+	modelsOut, err := ai.GetModels()
+	if err != nil {
+		t.Skipf("Server not reachable at %s: %v", endpoint, err)
+	}
+	t.Logf("Available models: %s", modelsOut)
+
+	if !modelInList(modelsOut, modelName) {
+		t.Skipf("Model %q not found on server", modelName)
+	}
+
+	// Set the model and run tests
+	prv.Model = modelName
+	ai = creative.RouterAI(prv)
+
+	t.Run("Send_chat", func(t *testing.T) {
+		resp, err := ai.Send([]creative.ChatMessage{
+			{Role: "system", Content: "Отвечай только одним числом, без пояснений"},
+			{Role: "user", Content: "Сколько будет 2+2?"},
+		}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Chat response: %s", resp)
+		if resp == "" {
+			t.Error("empty response")
+		}
+	})
+
+	t.Run("Send_generate", func(t *testing.T) {
+		resp, err := ai.Send([]creative.ChatMessage{
+			{Role: "system", Content: "Отвечай только одним числом"},
+			{Role: "user", Content: "Сколько будет 3*4?"},
+		}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Generate response: %s", resp)
+		if resp == "" {
+			t.Error("empty response")
+		}
+	})
+
+	t.Run("SendStream_chat", func(t *testing.T) {
+		var chunks []string
+		resp, err := ai.SendStream([]creative.ChatMessage{
+			{Role: "system", Content: "Отвечай коротко, одним словом"},
+			{Role: "user", Content: "Назови столицу Франции"},
+		}, true, func(chunk string) {
+			chunks = append(chunks, chunk)
+			t.Logf("chunk: %s", chunk)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Full streaming response: %s", resp)
+		if resp == "" {
+			t.Error("empty streaming response")
+		}
+		if len(chunks) == 0 {
+			t.Error("no chunks received")
+		}
+		assembled := strings.Join(chunks, "")
+		if assembled != resp {
+			t.Errorf("assembled chunks != full response:\n  chunks: %q\n  resp:   %q", assembled, resp)
+		}
+	})
+
+	t.Run("SendStream_generate", func(t *testing.T) {
+		var chunks []string
+		resp, err := ai.SendStream([]creative.ChatMessage{
+			{Role: "user", Content: "Напиши одно слово: привет"},
+		}, false, func(chunk string) {
+			chunks = append(chunks, chunk)
+			t.Logf("chunk: %s", chunk)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Full streaming (generate) response: %s", resp)
+		if resp == "" {
+			t.Error("empty streaming response")
+		}
+		if len(chunks) == 0 {
+			t.Error("no chunks received")
+		}
+		assembled := strings.Join(chunks, "")
+		if assembled != resp {
+			t.Errorf("assembled chunks != full response:\n  chunks: %q\n  resp:   %q", assembled, resp)
+		}
+	})
+
+	t.Run("Agent", func(t *testing.T) {
+		// Agent test is slow with large models; skip unless model was explicitly set
+		if os.Getenv("CREATIVE_MODEL") == "" {
+			t.Skip("Skipping Agent test for default model. Set CREATIVE_MODEL to run.")
+		}
+		// Use longer timeout and smaller context for agent
+		prvAgent := prv
+		prvAgent.RequestTimeout = 10 * time.Minute
+		prvAgent.ContextSize = 2048
+		aiAgent := creative.RouterAI(prvAgent)
+
+		oldIter := creative.MaxAgentIterations
+		creative.MaxAgentIterations = 2
+		defer func() { creative.MaxAgentIterations = oldIter }()
+
+		agent := creative.NewAgent(&aiAgent, "math", "Ты хорошо знаешь математику. Отвечай только результатом.")
+		agent.Init()
+		resp, err := agent.Send("2 + 3 =")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Agent response: %s", resp)
+		if resp == "" {
+			t.Error("empty agent response")
+		}
+	})
+}
+
+// modelInList checks if the given model name exists in the JSON model list
+// returned by an OpenAI-compatible /models endpoint.
+func modelInList(modelsJSON, modelID string) bool {
+	// Build the exact pattern: "id":"<modelID>"
+	pattern := `"id":"` + modelID + `"`
+	if strings.Contains(modelsJSON, pattern) {
+		return true
+	}
+	// Also try with space: "id": "<modelID>"
+	pattern2 := `"id": "` + modelID + `"`
+	return strings.Contains(modelsJSON, pattern2)
 }
