@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Konstantin8105/creative"
+	"github.com/Konstantin8105/creative/internal/webserver"
 )
 
 // ANSI color codes for terminal output
@@ -32,6 +33,10 @@ func main() {
 	var (
 		booksDir = flag.String("books", "", "Path to the books directory (required)")
 		help     = flag.Bool("help", false, "Show help")
+
+		// Mode selection
+		webMode = flag.Bool("web", false, "Run as web server instead of console chat")
+		port    = flag.String("port", "2345", "Web server port (used with -web)")
 
 		// AI provider configuration flags
 		endpoint    = flag.String("endpoint", "http://localhost:11434/v1/", "AI API endpoint (OpenAI-compatible)")
@@ -107,6 +112,13 @@ func main() {
 	// Set tool result preview length (0 = full output)
 	if *fullResult {
 		creative.ToolResultMaxPreview = 0
+	}
+
+	// Web mode: start HTTP server instead of console chat
+	if *webMode {
+		log.Printf("Starting web server on :%s", *port)
+		webserver.Start(prvAI, tools, *port)
+		return
 	}
 
 	// Set up beautiful streaming callbacks

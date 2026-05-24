@@ -188,10 +188,11 @@ func TestBookTools(t *testing.T) {
 		}
 	})
 
-	t.Run("search_in_book_unknown_mode", func(t *testing.T) {
-		result := executeTool(t, "search_in_book", "book_sample.txt текст invalid_mode")
-		if !strings.Contains(result, "Ошибка") {
-			t.Errorf("should reject unknown mode, got:\n%s", result)
+	t.Run("search_in_book_pattern_with_spaces", func(t *testing.T) {
+		// Сложный паттерн с пробелами не должен выдавать "неизвестный режим"
+		result := executeTool(t, "search_in_book", "book_sample.txt румяное яблоко")
+		if !strings.Contains(result, "румяное яблоко") {
+			t.Errorf("should find the multi-word pattern, got:\n%s", result)
 		}
 	})
 

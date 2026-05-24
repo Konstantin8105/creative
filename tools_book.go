@@ -307,9 +307,6 @@ func readBookLinesTool(params string) string {
 func searchInBookTool(params string) string {
 	// Парсинг: filename "pattern" [mode]
 	// Имя файла может быть в кавычках или без
-	var filename, pattern, mode string
-
-	// Убираем лишние пробелы
 	params = strings.TrimSpace(params)
 
 	if params == "" {
@@ -322,58 +319,81 @@ func searchInBookTool(params string) string {
 		if endQuote < 0 {
 			return "Ошибка: неверный формат. Используйте: search_in_book \"имя файла.txt\" \"паттерн\""
 		}
-		filename = params[1 : endQuote+1]
+		filename := params[1 : endQuote+1]
 		remaining := strings.TrimSpace(params[endQuote+2:])
 		if remaining == "" {
 			return "Ошибка: не указан паттерн для поиска."
 		}
-		// Теперь оставшаяся часть: "pattern" [mode] или pattern [mode]
 		if strings.HasPrefix(remaining, "\"") {
 			endQuote2 := strings.Index(remaining[1:], "\"")
 			if endQuote2 < 0 {
 				return "Ошибка: неверный формат паттерна."
 			}
-			pattern = remaining[1 : endQuote2+1]
-			mode = strings.TrimSpace(remaining[endQuote2+2:])
-		} else {
-			parts := strings.Fields(remaining)
-			pattern = parts[0]
-			if len(parts) > 1 {
-				mode = parts[1]
+			pattern := remaining[1 : endQuote2+1]
+			fullPath, errMsg := resolveFile(filename)
+			if errMsg != "" {
+				return errMsg
 			}
+			// Режим опционально после кавычек
+			mode := strings.TrimSpace(remaining[endQuote2+2:])
+			return runSearch(fullPath, filename, pattern, mode)
 		}
-	} else {
-		parts := strings.Fields(params)
-		if len(parts) < 2 {
-			return "Ошибка: недостаточно параметров. Используйте: search_in_book имя_файла \"паттерн\""
+		// Без кавычек — всё остальное это паттерн (может быть многословным)
+		mode, pattern := splitLastMode(remaining)
+		fullPath, errMsg := resolveFile(filename)
+		if errMsg != "" {
+			return errMsg
 		}
-		filename = parts[0]
-		// Паттерн — второй параметр, остальное опционально
-		if len(parts) >= 3 {
-			pattern = parts[1]
-			mode = parts[2]
-		} else {
-			pattern = parts[1]
-		}
+		return runSearch(fullPath, filename, pattern, mode)
 	}
 
-	if pattern == "" {
-		return "Ошибка: не указан паттерн для поиска. Используйте search_in_book имя_файла \"текст для поиска\""
+	// Имя файла без кавычек
+	parts := strings.Fields(params)
+	if len(parts) < 2 {
+		return "Ошибка: недостаточно параметров. Используйте: search_in_book имя_файла \"паттерн\""
 	}
-
+	filename := parts[0]
+	// Всё после имени файла — это паттерн. Последнее слово может быть режимом.
+	remaining := strings.Join(parts[1:], " ")
+	mode, pattern := splitLastMode(remaining)
 	fullPath, errMsg := resolveFile(filename)
 	if errMsg != "" {
 		return errMsg
 	}
+	return runSearch(fullPath, filename, pattern, mode)
+}
 
-	// Определяем режим поиска
+// splitLastMode проверяет, является ли последнее слово режимом поиска.
+// Если да — возвращает его отдельно. Иначе всё считается паттерном.
+func splitLastMode(s string) (mode, pattern string) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", ""
+	}
+	fields := strings.Fields(s)
+	if len(fields) == 1 {
+		return "", s
+	}
+	last := strings.ToLower(fields[len(fields)-1])
+	if last == "keyword" || last == "regex" {
+		return last, strings.Join(fields[:len(fields)-1], " ")
+	}
+	// Последнее слово не является известным режимом — всё это паттерн
+	return "", s
+}
+
+// runSearch выполняет поиск по ключевым словам или regex.
+func runSearch(fullPath, filename, pattern, mode string) string {
+	if pattern == "" {
+		return "Ошибка: не указан паттерн для поиска. Используйте search_in_book имя_файла \"текст для поиска\""
+	}
 	mode = strings.ToLower(strings.TrimSpace(mode))
-	if mode == "" || mode == "keyword" {
-		// Поиск по ключевым словам (регистронезависимый)
+	switch mode {
+	case "", "keyword":
 		return searchByKeyword(fullPath, filename, pattern)
-	} else if mode == "regex" {
+	case "regex":
 		return searchByRegex(fullPath, filename, pattern)
-	} else {
+	default:
 		return fmt.Sprintf("Ошибка: неизвестный режим %q. Используйте 'keyword' или 'regex'.", mode)
 	}
 }
