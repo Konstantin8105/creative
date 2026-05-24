@@ -77,43 +77,58 @@ func (ch *Chat) Send(agentName, input string, isChat bool) (responce string, err
 	return
 }
 
+// processToolCalls processes tool calls in a loop.
+// Each iteration: extracts all {{tool:...}} from the last assistant response,
+// executes them, replaces markers with results, and sends back to AI.
+// Continues until no more tool calls are found or MaxToolIterations is reached.
 func (ch *Chat) processToolCalls(isChat bool) (string, error) {
-	last := ch.msgs[len(ch.msgs)-1]
-	if last.Role != "assistant" {
-		return last.Content, nil
-	}
-
-	// Extract ALL tool calls from the response in one pass (max MaxToolIterations)
-	calls := ExtractAllToolCalls(last.Content, MaxToolIterations)
-	if len(calls) == 0 {
-		return last.Content, nil
-	}
-
-	// Replace markers and execute all tools
-	assistantIdx := len(ch.msgs) - 1 // index of the assistant message (before appending system messages)
-	content := last.Content
-	for _, call := range calls {
-		result, err := ExecuteTool(call.Name, call.Params, ch.Tools)
-		if err != nil {
-			return "", fmt.Errorf("tool execution error: %w", err)
+	for iteration := 0; iteration < MaxToolIterations; iteration++ {
+		last := ch.msgs[len(ch.msgs)-1]
+		if last.Role != "assistant" {
+			return last.Content, nil
 		}
-		content = strings.ReplaceAll(content, call.Raw, result)
-		ch.msgs = append(ch.msgs, ChatMessage{
-			Role:    "system",
-			Content: fmt.Sprintf("Результат выполнения инструмента `%s`: %s", call.Name, result),
-		})
-	}
-	ch.msgs[assistantIdx].Content = content
 
-	// Single AI call with all tool results in context
-	response, err := ch.prv.Send(ch.msgs, isChat)
-	if err != nil {
-		return "", err
+		// Extract ALL tool calls from the response
+		calls := ExtractAllToolCalls(last.Content, MaxToolIterations)
+		if len(calls) == 0 {
+			return last.Content, nil
+		}
+
+		// Replace markers and execute all tools
+		assistantIdx := len(ch.msgs) - 1
+		content := last.Content
+		for _, call := range calls {
+			result, err := ExecuteTool(call.Name, call.Params, ch.Tools)
+			if err != nil {
+				return "", fmt.Errorf("tool execution error: %w", err)
+			}
+			content = strings.ReplaceAll(content, call.Raw, result)
+			ch.msgs = append(ch.msgs, ChatMessage{
+				Role:    "system",
+				Content: fmt.Sprintf("Результат выполнения инструмента `%s`: %s", call.Name, result),
+			})
+		}
+		ch.msgs[assistantIdx].Content = content
+
+		// Single AI call with all tool results in context
+		response, err := ch.prv.Send(ch.msgs, isChat)
+		if err != nil {
+			return "", err
+		}
+		response = strings.TrimSpace(response)
+		if response == "" {
+			return ch.msgs[len(ch.msgs)-2].Content, nil
+		}
+		ch.msgs = append(ch.msgs, ChatMessage{Role: "assistant", Content: response})
+
+		// If no more tool calls in the response — we're done
+		if !strings.Contains(response, "{{tool:") {
+			return response, nil
+		}
+		// Otherwise, loop and process the next batch
 	}
-	response = strings.TrimSpace(response)
-	if response == "" {
-		return ch.msgs[len(ch.msgs)-2].Content, nil
-	}
-	ch.msgs = append(ch.msgs, ChatMessage{Role: "assistant", Content: response})
-	return response, nil
+
+	// Max iterations reached — return last response
+	last := ch.msgs[len(ch.msgs)-1]
+	return last.Content, nil
 }

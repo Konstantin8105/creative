@@ -260,6 +260,50 @@ func TestLMStudio(t *testing.T) {
 		}
 	})
 
+	t.Run("BookTools", func(t *testing.T) {
+		// Проверяет, что AI может вызывать книжные инструменты через {{tool:...}}
+		// processToolCalls теперь работает в цикле (до MaxToolIterations=5 итераций),
+		// поэтому если AI вызывает инструменты по одному — всё равно обработаются.
+
+		// Устанавливаем папку с книгами на testdata
+		oldFolder := creative.BooksFolder
+		creative.BooksFolder = "testdata"
+		defer func() { creative.BooksFolder = oldFolder }()
+
+		ch := creative.NewChat(&ai)
+		allTools := append(creative.DefaultTools(), creative.BookTools()...)
+		ch.SetTools(allTools)
+		ch.AddSystem(creative.ToolsPrompt(allTools))
+
+		// Явно указываем формат {{tool:...}} — иначе модель не вызывает инструменты
+		resp, err := ch.Send("", `Выполни следующие действия по порядку.
+ОБЯЗАТЕЛЬНО используй формат {{tool:название_инструмента параметры}} для вызова.
+
+1. {{tool:list_books}}
+2. {{tool:book_info book_sample.txt}}
+3. {{tool:search_in_book book_sample.txt "Париж" keyword}}
+4. {{tool:read_book_lines book_sample.txt 1 5}}
+
+После КАЖДОГО шага напиши краткий ответ пользователю. Используй один инструмент за раз.`, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("BookTools final response: %s", resp)
+		if resp == "" {
+			t.Error("empty response")
+		}
+
+		str := ch.String()
+		t.Logf("Chat messages: %s", str)
+
+		// Проверяем, что инструменты были вызваны
+		if strings.Contains(str, "Результат выполнения инструмента") {
+			t.Log("OK: book tools were called and results injected")
+		} else {
+			t.Error("Book tools were not called by the model")
+		}
+	})
+
 	t.Run("Agent", func(t *testing.T) {
 		// Agent test is slow with large models; skip unless model was explicitly set
 		if os.Getenv("CREATIVE_MODEL") == "" {
