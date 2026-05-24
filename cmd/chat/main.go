@@ -179,7 +179,7 @@ func main() {
 	// Interactive chat loop
 	fmt.Printf("\n")
 	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold+colorBlue, colorReset)
-	fmt.Printf("  %s 📚  Book Analysis Chat%s\n", colorBold+colorCyan, colorReset)
+	fmt.Printf("  %s 📚  IZYseek%s\n", colorBold+colorCyan, colorReset)
 	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold+colorBlue, colorReset)
 	fmt.Printf("  %sBooks:%s %s%s%s\n", colorBold, colorReset, colorGray, *booksDir, colorReset)
 	fmt.Printf("  %sModel:%s %s%s%s\n", colorBold, colorReset, colorGray, *model, colorReset)
