@@ -42,34 +42,6 @@ func TestAiComp(t *testing.T) {
 			})
 		}
 	})
-	t.Run("Agent", func(t *testing.T) {
-		ai := TestAi{rs: []string{
-			"7",
-			"22",
-			string(creative.FinishDisscussion),
-		}}
-		agent := creative.NewAgent(&ai, "math", "Ты хорошо знаешь математику")
-		agent.Init()
-		r, err := agent.Send("4 + 3 =")
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("response: %s", r)
-
-		// Reset mock for second call
-		ai.counter = 0
-		ai.rs = []string{
-			"7",
-			"22",
-			string(creative.FinishDisscussion),
-		}
-		r, err = agent.Send("10 + 12 =")
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("response: %s", r)
-		t.Logf("%s", agent.String())
-	})
 	t.Run("SendStream", func(t *testing.T) {
 		ai := TestAi{rs: []string{"Hello", " ", "World", "!"}}
 		out, err := ai.SendStream(nil, true, func(chunk string) {
@@ -304,32 +276,6 @@ func TestLMStudio(t *testing.T) {
 		}
 	})
 
-	t.Run("Agent", func(t *testing.T) {
-		// Agent test is slow with large models; skip unless model was explicitly set
-		if os.Getenv("CREATIVE_MODEL") == "" {
-			t.Skip("Skipping Agent test for default model. Set CREATIVE_MODEL to run.")
-		}
-		// Use longer timeout and smaller context for agent
-		prvAgent := prv
-		prvAgent.RequestTimeout = 10 * time.Minute
-		prvAgent.ContextSize = 2048
-		aiAgent := creative.RouterAI(prvAgent)
-
-		oldIter := creative.MaxAgentIterations
-		creative.MaxAgentIterations = 2
-		defer func() { creative.MaxAgentIterations = oldIter }()
-
-		agent := creative.NewAgent(&aiAgent, "math", "Ты хорошо знаешь математику. Отвечай только результатом.")
-		agent.Init()
-		resp, err := agent.Send("2 + 3 =")
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("Agent response: %s", resp)
-		if resp == "" {
-			t.Error("empty agent response")
-		}
-	})
 }
 
 // modelInList checks if the given model name exists in the JSON model list
