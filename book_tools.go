@@ -2,6 +2,7 @@ package creative
 
 import (
 	"bufio"
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,14 @@ import (
 	"sort"
 	"strings"
 )
+
+//go:embed book_system_prompt.txt
+var bookSystemPromptFile []byte
+
+// BookSystemPrompt возвращает встроенный системный промпт для работы с книгами.
+func BookSystemPrompt() string {
+	return string(bookSystemPromptFile)
+}
 
 // BooksFolder — путь к папке с книгами.
 // Устанавливается один раз перед использованием BookTools.
