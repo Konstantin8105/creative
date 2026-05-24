@@ -182,6 +182,31 @@ type openAIResponse struct {
 	} `json:"usage"`
 }
 
+// streamChunk is the SSE stream chunk structure for OpenAI Chat Completions.
+type streamChunk struct {
+	Choices []struct {
+		Index int `json:"index"`
+		Delta struct {
+			Role             string           `json:"role"`
+			Content          string           `json:"content"`
+			ReasoningContent string           `json:"reasoning_content"`
+			ToolCalls        []streamToolCall `json:"tool_calls"`
+		} `json:"delta"`
+		Text string `json:"text"`
+	} `json:"choices"`
+}
+
+// streamToolCall represents a tool call delta in an SSE stream chunk.
+type streamToolCall struct {
+	Index    int    `json:"index"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
 // defaults sets default values for unset fields.
 func (o *RouterAI) defaults() {
 	if o.Endpoint == "" {
@@ -285,8 +310,9 @@ func (o *RouterAI) Send(messages []ChatMessage, isChat bool, tools []Tool) (resp
 
 // SendStream sends messages with streaming support.
 // callback is called for each chunk of generated text.
+// chunkType is "content" for regular text or "reasoning" for thinking mode output.
 // Returns the complete assembled response message.
-func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(chunk string), tools []Tool) (response ChatMessage, err error) {
+func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(chunkType, chunk string), tools []Tool) (response ChatMessage, err error) {
 	if o.Endpoint == "" {
 		err = fmt.Errorf("empty endpoint")
 		return
@@ -357,7 +383,11 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 	done := make(chan struct{})
 	defer close(done)
 
-	var full strings.Builder
+	var fullContent strings.Builder
+	var fullReasoning strings.Builder
+
+	// Tool call accumulation: index -> ToolCall
+	toolCallAcc := make(map[int]*ToolCall)
 
 	for scanner.Scan() {
 		// Check if context was cancelled (by Stop())
@@ -365,7 +395,9 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 		case <-ctx.Done():
 			err = ctx.Err()
 			response.Role = "assistant"
-			response.Content = full.String()
+			response.Content = fullContent.String()
+			response.ReasoningContent = fullReasoning.String()
+			response.ToolCalls = finalizeToolCalls(toolCallAcc)
 			return response, err
 		default:
 		}
@@ -392,17 +424,7 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 		}
 
 		// Parse the chunk
-		var chunk struct {
-			Choices []struct {
-				Delta struct {
-					Content          string     `json:"content"`
-					ReasoningContent string     `json:"reasoning_content"`
-					ToolCalls        []ToolCall `json:"tool_calls"`
-				} `json:"delta"`
-				Text string `json:"text"`
-			} `json:"choices"`
-		}
-
+		var chunk streamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			// Skip malformed chunks
 			continue
@@ -413,21 +435,57 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 		}
 
 		if isChat {
+			// Process content delta
 			content := chunk.Choices[0].Delta.Content
 			if content != "" {
-				full.WriteString(content)
+				fullContent.WriteString(content)
 				if callback != nil {
-					callback(content)
+					callback("content", content)
 				}
 			}
-			// reasoning_content in stream chunks is not accumulated here;
-			// the streaming response only provides final content.
+
+			// Process reasoning_content delta (DeepSeek thinking mode)
+			reasoning := chunk.Choices[0].Delta.ReasoningContent
+			if reasoning != "" {
+				fullReasoning.WriteString(reasoning)
+				if callback != nil {
+					callback("reasoning", reasoning)
+				}
+			}
+
+			// Process tool_calls delta (accumulate across chunks)
+			toolCalls := chunk.Choices[0].Delta.ToolCalls
+			for _, tc := range toolCalls {
+				existing, ok := toolCallAcc[tc.Index]
+				if !ok {
+					// First chunk for this tool call index — create a new entry
+					toolCallAcc[tc.Index] = &ToolCall{
+						ID:   tc.ID,
+						Type: "function",
+						Function: ToolCallFunction{
+							Name:      tc.Function.Name,
+							Arguments: tc.Function.Arguments,
+						},
+					}
+				} else {
+					// Subsequent chunk — accumulate arguments
+					if tc.ID != "" {
+						existing.ID = tc.ID
+					}
+					if tc.Function.Name != "" {
+						existing.Function.Name = tc.Function.Name
+					}
+					if tc.Function.Arguments != "" {
+						existing.Function.Arguments += tc.Function.Arguments
+					}
+				}
+			}
 		} else {
 			content := chunk.Choices[0].Text
 			if content != "" {
-				full.WriteString(content)
+				fullContent.WriteString(content)
 				if callback != nil {
-					callback(content)
+					callback("content", content)
 				}
 			}
 		}
@@ -435,11 +493,40 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 
 	if err := scanner.Err(); err != nil {
 		response.Role = "assistant"
-		response.Content = full.String()
+		response.Content = fullContent.String()
+		response.ReasoningContent = fullReasoning.String()
+		response.ToolCalls = finalizeToolCalls(toolCallAcc)
 		return response, fmt.Errorf("stream read error: %w", err)
 	}
 
 	response.Role = "assistant"
-	response.Content = full.String()
+	response.Content = fullContent.String()
+	response.ReasoningContent = fullReasoning.String()
+	response.ToolCalls = finalizeToolCalls(toolCallAcc)
 	return
+}
+
+// finalizeToolCalls converts the accumulated tool calls map to a sorted slice.
+func finalizeToolCalls(acc map[int]*ToolCall) []ToolCall {
+	if len(acc) == 0 {
+		return nil
+	}
+	// Collect indices and sort them
+	indices := make([]int, 0, len(acc))
+	for idx := range acc {
+		indices = append(indices, idx)
+	}
+	// Sort indices (ascending)
+	for i := 0; i < len(indices); i++ {
+		for j := i + 1; j < len(indices); j++ {
+			if indices[j] < indices[i] {
+				indices[i], indices[j] = indices[j], indices[i]
+			}
+		}
+	}
+	result := make([]ToolCall, len(indices))
+	for i, idx := range indices {
+		result[i] = *acc[idx]
+	}
+	return result
 }

@@ -47,8 +47,8 @@ func TestAiComp(t *testing.T) {
 	})
 	t.Run("SendStream", func(t *testing.T) {
 		ai := TestAi{rs: []string{"Hello", " ", "World", "!"}}
-		out, err := ai.SendStream(nil, true, func(chunk string) {
-			t.Logf("chunk: %s", chunk)
+		out, err := ai.SendStream(nil, true, func(chunkType, chunk string) {
+			t.Logf("chunk [%s]: %s", chunkType, chunk)
 		}, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -61,7 +61,7 @@ func TestAiComp(t *testing.T) {
 	t.Run("SendStream_empty", func(t *testing.T) {
 		ai := TestAi{resp: "single response"}
 		var chunks []string
-		out, err := ai.SendStream(nil, true, func(chunk string) {
+		out, err := ai.SendStream(nil, true, func(chunkType, chunk string) {
 			chunks = append(chunks, chunk)
 		}, nil)
 		if err != nil {
@@ -228,9 +228,9 @@ func TestLMStudio(t *testing.T) {
 		resp, err := ai.SendStream([]creative.ChatMessage{
 			{Role: "system", Content: "Отвечай коротко, одним словом"},
 			{Role: "user", Content: "Назови столицу Франции"},
-		}, true, func(chunk string) {
+		}, true, func(chunkType, chunk string) {
 			chunks = append(chunks, chunk)
-			t.Logf("chunk: %s", chunk)
+			t.Logf("chunk [%s]: %s", chunkType, chunk)
 		}, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -252,9 +252,9 @@ func TestLMStudio(t *testing.T) {
 		var chunks []string
 		resp, err := ai.SendStream([]creative.ChatMessage{
 			{Role: "user", Content: "Напиши одно слово: привет"},
-		}, false, func(chunk string) {
+		}, false, func(chunkType, chunk string) {
 			chunks = append(chunks, chunk)
-			t.Logf("chunk: %s", chunk)
+			t.Logf("chunk [%s]: %s", chunkType, chunk)
 		}, nil)
 		if err != nil {
 			t.Fatal(err)

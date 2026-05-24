@@ -47,19 +47,19 @@ func (ai *TestAi) Stop() error {
 	return nil
 }
 
-func (ai *TestAi) SendStream(chs []creative.ChatMessage, isChat bool, callback func(chunk string), tools []creative.Tool) (creative.ChatMessage, error) {
+func (ai *TestAi) SendStream(chs []creative.ChatMessage, isChat bool, callback func(chunkType, chunk string), tools []creative.Tool) (creative.ChatMessage, error) {
 	if 0 < len(ai.rs) {
 		var full strings.Builder
 		for _, r := range ai.rs {
 			full.WriteString(r)
 			if callback != nil {
-				callback(r)
+				callback("content", r)
 			}
 		}
 		return creative.ChatMessage{Role: "assistant", Content: full.String()}, nil
 	}
 	if callback != nil {
-		callback(ai.resp)
+		callback("content", ai.resp)
 	}
 	return creative.ChatMessage{Role: "assistant", Content: ai.resp}, ai.err
 }

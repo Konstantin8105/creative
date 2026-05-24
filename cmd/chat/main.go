@@ -12,6 +12,20 @@ import (
 	"github.com/Konstantin8105/creative"
 )
 
+// ANSI color codes for terminal output
+const (
+	colorReset  = "\033[0m"
+	colorBold   = "\033[1m"
+	colorDim    = "\033[2m"
+	colorCyan   = "\033[36m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorRed    = "\033[31m"
+	colorBlue   = "\033[34m"
+	colorPurple = "\033[35m"
+	colorGray   = "\033[90m"
+)
+
 func main() {
 	log.SetOutput(os.Stdout)
 
@@ -25,6 +39,9 @@ func main() {
 		key         = flag.String("key", "", "API key for external provider (optional)")
 		timeout     = flag.Duration("timeout", 4*time.Hour, "Request timeout duration")
 		contextSize = flag.Int("context", 62000, "AI context window size in tokens")
+
+		// Tool result display
+		fullResult = flag.Bool("full-result", false, "Show full tool results without truncation")
 
 		// DeepSeek-specific flags
 		thinkingMode    = flag.Bool("thinking", false, "Enable DeepSeek thinking mode")
@@ -87,15 +104,80 @@ func main() {
 	// Add tools description to system prompt
 	ch.AddSystem(creative.ToolsPrompt(tools))
 
+	// Set tool result preview length (0 = full output)
+	if *fullResult {
+		creative.ToolResultMaxPreview = 0
+	}
+
+	// Set up beautiful streaming callbacks
+	ch.SetCallback(&creative.ChatEventCallback{
+		OnStreamChunk: func(chunk string) {
+			fmt.Print(colorCyan + chunk + colorReset)
+		},
+		OnReasoning: func(text string) {
+			fmt.Print(colorDim + colorGray + text + colorReset)
+		},
+		OnToolCall: func(name, args string) {
+			// Pretty-print the JSON args
+			prettyArgs := args
+			if strings.HasPrefix(args, "{") {
+				prettyArgs = strings.ReplaceAll(args, "\"", "")
+				prettyArgs = strings.ReplaceAll(prettyArgs, "{", "")
+				prettyArgs = strings.ReplaceAll(prettyArgs, "}", "")
+				prettyArgs = strings.ReplaceAll(prettyArgs, ",", ", ")
+			}
+			fmt.Printf("\n%s🔧 %sTool: %s%s(%s%s%s)%s\n",
+				colorReset,
+				colorBold,
+				colorBlue, name,
+				colorYellow, prettyArgs,
+				colorReset,
+				colorReset,
+			)
+		},
+		OnToolResult: func(name, result string) {
+			preview := result
+			maxPreview := creative.ToolResultMaxPreview
+			if maxPreview > 0 && len(preview) > maxPreview {
+				preview = preview[:maxPreview] + "... " + colorGray + "[truncated]" + colorReset
+			}
+			// Remove newlines in preview for single-line display when truncated
+			if maxPreview > 0 && len(result) > maxPreview {
+				preview = strings.ReplaceAll(preview, "\n", " ↵ ")
+				fmt.Printf("%s  %s✅ %s%s → %s%s\n",
+					colorReset,
+					colorBold,
+					colorGreen, name,
+					colorReset, preview,
+				)
+			} else {
+				fmt.Printf("%s  %s✅ %s%s →%s\n%s\n",
+					colorReset,
+					colorBold,
+					colorGreen, name,
+					colorReset,
+					preview,
+				)
+			}
+		},
+	})
+
 	// Interactive chat loop
-	fmt.Printf("📚 Book Analysis Chat\n")
-	fmt.Printf("Books directory: %s\n", *booksDir)
-	fmt.Printf("Model: %s\n", *model)
-	fmt.Printf("Type 'exit', 'quit' or Ctrl+C to stop.\n\n")
+	fmt.Printf("\n")
+	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold+colorBlue, colorReset)
+	fmt.Printf("  %s 📚  Book Analysis Chat%s\n", colorBold+colorCyan, colorReset)
+	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold+colorBlue, colorReset)
+	fmt.Printf("  %sBooks:%s %s%s%s\n", colorBold, colorReset, colorGray, *booksDir, colorReset)
+	fmt.Printf("  %sModel:%s %s%s%s\n", colorBold, colorReset, colorGray, *model, colorReset)
+	if *thinkingMode {
+		fmt.Printf("  %sThinking:%s %senabled (effort: %s)%s\n", colorBold, colorReset, colorGray, *reasoningEffort, colorReset)
+	}
+	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold+colorBlue, colorReset)
+	fmt.Printf("  %sType '%sexit%s' or '%squit%s' to stop.%s\n\n", colorDim, colorBold+colorRed, colorDim, colorBold+colorRed, colorDim, colorReset)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Print("> ")
+		fmt.Printf("%s>%s ", colorBold+colorGreen, colorReset)
 		if !scanner.Scan() {
 			break
 		}
@@ -107,18 +189,22 @@ func main() {
 
 		lower := strings.ToLower(input)
 		if lower == "exit" || lower == "quit" {
-			fmt.Println("Bye!")
+			fmt.Printf("\n  %sBye! 👋%s\n\n", colorBold+colorCyan, colorReset)
 			break
 		}
 
-		// Send to AI
-		resp, err := ch.Send("chat", input, true)
+		// Print user message
+		fmt.Printf("\n%s  🎯 %s%s%s\n\n", colorBold+colorGreen, colorReset, input, colorReset)
+
+		// Send to AI with streaming
+		_, err := ch.SendStream("chat", input, true)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			fmt.Printf("\n%s  ⚠️  Error:%s %v%s\n\n", colorBold+colorRed, colorReset, err, colorReset)
 			continue
 		}
 
-		fmt.Println(resp)
+		// Print final blank line after response
+		fmt.Println()
 		fmt.Println()
 	}
 
