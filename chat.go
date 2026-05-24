@@ -141,6 +141,12 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 	return last.Content, nil
 }
 
+// Stop cancels an ongoing AI operation for this chat.
+// This delegates to the underlying AIrunner implementation.
+func (ch *Chat) Stop() error {
+	return ch.prv.Stop()
+}
+
 // findTool looks up a tool by name in the tools slice.
 func findTool(name string, tools []Tool) (Tool, bool) {
 	for _, t := range tools {

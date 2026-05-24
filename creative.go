@@ -21,4 +21,8 @@ type AIrunner interface {
 	// Returns the complete assembled response ChatMessage.
 	// tools parameter contains available tool definitions.
 	SendStream(chs []ChatMessage, isChat bool, callback func(chunk string), tools []Tool) (msg ChatMessage, err error)
+
+	// Stop cancels an ongoing Send or SendStream operation.
+	// Returns nil if no operation is in progress.
+	Stop() error
 }

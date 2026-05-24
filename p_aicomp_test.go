@@ -1,6 +1,9 @@
 package creative_test
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -72,7 +75,67 @@ func TestAiComp(t *testing.T) {
 		}
 	})
 	t.Run("RouterAI_type", func(t *testing.T) {
-		var _ creative.AIrunner = creative.RouterAI{}
+		var _ creative.AIrunner = (*creative.RouterAI)(nil)
+	})
+	t.Run("Stop", func(t *testing.T) {
+		// Create a test HTTP server that streams slowly
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				t.Fatal("expected http.Flusher")
+			}
+			for i := 0; i < 100; i++ {
+				fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"chunk-%d \"}}]}\n\n", i)
+				flusher.Flush()
+				time.Sleep(10 * time.Millisecond)
+			}
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+		}))
+		defer srv.Close()
+
+		prv := creative.Provider{
+			Endpoint:       srv.URL + "/v1",
+			Model:          "test-model",
+			RequestTimeout: 30 * time.Second,
+			ContextSize:    4096,
+		}
+		ai := creative.NewRouterAI(prv)
+
+		type result struct {
+			resp creative.ChatMessage
+			err  error
+		}
+		ch := make(chan result, 1)
+
+		go func() {
+			resp, err := ai.SendStream([]creative.ChatMessage{
+				{Role: "user", Content: "test"},
+			}, true, nil, nil)
+			ch <- result{resp, err}
+		}()
+
+		// Let it stream a few chunks, then stop
+		time.Sleep(50 * time.Millisecond)
+		err := ai.Stop()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := <-ch
+		if r.err == nil {
+			t.Error("expected error after Stop(), got nil")
+		} else {
+			t.Logf("Got expected error after Stop(): %v", r.err)
+		}
+		if r.resp.Content == "" {
+			t.Error("expected partial content after Stop()")
+		} else {
+			t.Logf("Partial content after Stop(): %q", r.resp.Content)
+		}
 	})
 }
 
@@ -117,7 +180,7 @@ func TestLMStudio(t *testing.T) {
 	}
 
 	// Check if server is reachable and model is available
-	ai := creative.RouterAI(prv)
+	ai := creative.NewRouterAI(prv)
 	modelsOut, err := ai.GetModels()
 	if err != nil {
 		t.Skipf("Server not reachable at %s: %v", endpoint, err)
@@ -130,7 +193,7 @@ func TestLMStudio(t *testing.T) {
 
 	// Set the model and run tests
 	prv.Model = modelName
-	ai = creative.RouterAI(prv)
+	ai = creative.NewRouterAI(prv)
 
 	t.Run("Send_chat", func(t *testing.T) {
 		resp, err := ai.Send([]creative.ChatMessage{
@@ -210,7 +273,7 @@ func TestLMStudio(t *testing.T) {
 	})
 
 	t.Run("ToolCall", func(t *testing.T) {
-		ch := creative.NewChat(&ai)
+		ch := creative.NewChat(ai)
 		ch.SetTools(creative.DefaultTools())
 		ch.AddSystem(creative.ToolsPrompt(creative.DefaultTools()))
 
@@ -240,7 +303,7 @@ func TestLMStudio(t *testing.T) {
 		creative.BooksFolder = "testdata"
 		defer func() { creative.BooksFolder = oldFolder }()
 
-		ch := creative.NewChat(&ai)
+		ch := creative.NewChat(ai)
 		allTools := append(creative.DefaultTools(), creative.BookTools()...)
 		ch.SetTools(allTools)
 		ch.AddSystem(creative.ToolsPrompt(allTools))

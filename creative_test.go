@@ -43,6 +43,10 @@ func (ai *TestAi) Send(chs []creative.ChatMessage, isChat bool, tools []creative
 	return creative.ChatMessage{Role: "assistant", Content: ai.resp}, ai.err
 }
 
+func (ai *TestAi) Stop() error {
+	return nil
+}
+
 func (ai *TestAi) SendStream(chs []creative.ChatMessage, isChat bool, callback func(chunk string), tools []creative.Tool) (creative.ChatMessage, error) {
 	if 0 < len(ai.rs) {
 		var full strings.Builder

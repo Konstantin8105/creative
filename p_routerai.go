@@ -3,11 +3,13 @@ package creative
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -15,13 +17,57 @@ var _ AIrunner = new(RouterAI)
 
 // RouterAI is an AI provider implementation for OpenAI-compatible API (DeepSeek, etc.).
 // It embeds Provider configuration and implements AIrunner interface.
-type RouterAI Provider
+type RouterAI struct {
+	Provider
 
-func (pr RouterAI) GetContextSize() int {
-	return pr.ContextSize
+	mu     sync.Mutex
+	cancel context.CancelFunc
 }
 
-func (o RouterAI) GetModels() (out string, err error) {
+// NewRouterAI creates a new RouterAI from a Provider configuration.
+func NewRouterAI(prv Provider) *RouterAI {
+	return &RouterAI{Provider: prv}
+}
+
+// setCancel stores the cancel function and returns a derived context.
+func (o *RouterAI) setCancel() context.Context {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	// Cancel any previous operation
+	if o.cancel != nil {
+		o.cancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	o.cancel = cancel
+	return ctx
+}
+
+// clearCancel removes the stored cancel function.
+func (o *RouterAI) clearCancel() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.cancel != nil {
+		o.cancel()
+		o.cancel = nil
+	}
+}
+
+// Stop cancels an ongoing Send or SendStream operation.
+func (o *RouterAI) Stop() error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.cancel != nil {
+		o.cancel()
+		o.cancel = nil
+	}
+	return nil
+}
+
+func (o *RouterAI) GetContextSize() int {
+	return o.ContextSize
+}
+
+func (o *RouterAI) GetModels() (out string, err error) {
 	endpoint := o.Endpoint + "/models"
 	resp, err := http.Get(endpoint)
 	if err != nil {
@@ -37,7 +83,7 @@ func (o RouterAI) GetModels() (out string, err error) {
 }
 
 // buildEndpoint constructs the API endpoint URL based on isChat flag.
-func (o RouterAI) buildEndpoint(isChat bool) string {
+func (o *RouterAI) buildEndpoint(isChat bool) string {
 	endpoint := o.Endpoint
 	if len(endpoint) > 0 && endpoint[len(endpoint)-1] != '/' {
 		endpoint += "/"
@@ -71,7 +117,7 @@ type thinkingParam struct {
 }
 
 // requestBody builds the JSON request body for the RouterAI API.
-func (o RouterAI) requestBody(messages []ChatMessage, isChat bool, stream bool, tools []Tool) interface{} {
+func (o *RouterAI) requestBody(messages []ChatMessage, isChat bool, stream bool, tools []Tool) interface{} {
 	body := openAIRequest{
 		Model:       o.Model,
 		Stream:      stream,
@@ -153,7 +199,7 @@ func (o *RouterAI) defaults() {
 }
 
 // Send sends messages to the AI and returns the full assistant response message.
-func (o RouterAI) Send(messages []ChatMessage, isChat bool, tools []Tool) (response ChatMessage, err error) {
+func (o *RouterAI) Send(messages []ChatMessage, isChat bool, tools []Tool) (response ChatMessage, err error) {
 	if o.Endpoint == "" {
 		err = fmt.Errorf("empty endpoint")
 		return
@@ -169,6 +215,10 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool, tools []Tool) (respo
 		o.ContextSize = 4096
 	}
 
+	// Create cancellable context
+	ctx := o.setCancel()
+	defer o.clearCancel()
+
 	endpoint := o.buildEndpoint(isChat)
 	body := o.requestBody(messages, isChat, false, tools)
 
@@ -179,7 +229,7 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool, tools []Tool) (respo
 	}
 
 	client := &http.Client{Timeout: o.RequestTimeout}
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		err = fmt.Errorf("create request error: %w", err)
 		return
@@ -236,7 +286,7 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool, tools []Tool) (respo
 // SendStream sends messages with streaming support.
 // callback is called for each chunk of generated text.
 // Returns the complete assembled response message.
-func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(chunk string), tools []Tool) (response ChatMessage, err error) {
+func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(chunk string), tools []Tool) (response ChatMessage, err error) {
 	if o.Endpoint == "" {
 		err = fmt.Errorf("empty endpoint")
 		return
@@ -252,6 +302,10 @@ func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(
 		o.ContextSize = 4096
 	}
 
+	// Create cancellable context
+	ctx := o.setCancel()
+	defer o.clearCancel()
+
 	endpoint := o.buildEndpoint(isChat)
 	body := o.requestBody(messages, isChat, true, tools)
 
@@ -262,7 +316,7 @@ func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(
 	}
 
 	client := &http.Client{Timeout: o.RequestTimeout}
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		err = fmt.Errorf("create request error: %w", err)
 		return
@@ -298,9 +352,24 @@ func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max line length
 
+	// Goroutine to cancel context on context done
+	// to ensure scanner.Scan() returns early on cancellation
+	done := make(chan struct{})
+	defer close(done)
+
 	var full strings.Builder
 
 	for scanner.Scan() {
+		// Check if context was cancelled (by Stop())
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+			response.Role = "assistant"
+			response.Content = full.String()
+			return response, err
+		default:
+		}
+
 		line := scanner.Text()
 
 		// Skip empty lines (keep-alive mechanism)

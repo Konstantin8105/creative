@@ -74,7 +74,8 @@ func main() {
 	}
 
 	// Create chat with provider
-	ch := creative.NewChat(creative.RouterAI(prv))
+	prvAI := creative.NewRouterAI(prv)
+	ch := creative.NewChat(prvAI)
 
 	// Add system prompt for book analysis
 	ch.AddSystem(creative.BookSystemPrompt())
