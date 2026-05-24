@@ -63,7 +63,7 @@ func BookTools() []Tool {
 		},
 		{
 			Name:        "search_in_book",
-			Description: "Search in a book by keywords or regular expression. Parameters: filename, pattern, mode (optional). Modes: keyword (substring search, default) or regex. Example: search_in_book book.txt \"Napoleon\" or search_in_book file.md \"\\bGo\\b\" regex",
+			Description: "Search in a book by keywords or regular expression. Parameters: filename, pattern, mode (optional). Modes: keyword (substring search with | as OR, default) or regex. Example: search_in_book book.txt \"Napoleon\" or search_in_book file.md \"\\bGo\\b\" regex",
 			Parameters: &ToolParameters{
 				Type: "object",
 				Properties: map[string]ToolProperty{
@@ -73,11 +73,11 @@ func BookTools() []Tool {
 					},
 					"pattern": {
 						Type:        "string",
-						Description: "Search pattern: keyword or regular expression",
+						Description: "Search pattern: keyword or regular expression. Use | for OR in keyword mode (e.g., 'anchor|belief|state')",
 					},
 					"mode": {
 						Type:        "string",
-						Description: "Search mode: 'keyword' (default, case-insensitive) or 'regex'",
+						Description: "Search mode: 'keyword' (default, case-insensitive, use | for OR) or 'regex'",
 						Enum:        []string{"keyword", "regex"},
 					},
 				},
@@ -399,6 +399,8 @@ func runSearch(fullPath, filename, pattern, mode string) string {
 }
 
 // searchByKeyword ищет регистронезависимые вхождения подстроки.
+// Поддерживает pipe | как OR-разделитель: "якор|коллапс|схлоп" ищет
+// любое из этих слов. Одиночный термин работает как обычный Contains.
 func searchByKeyword(fullPath, filename, pattern string) string {
 	f, err := os.Open(fullPath)
 	if err != nil {
@@ -406,7 +408,8 @@ func searchByKeyword(fullPath, filename, pattern string) string {
 	}
 	defer f.Close()
 
-	patternLower := strings.ToLower(pattern)
+	// Разбиваем паттерн по | для OR-поиска
+	orParts := splitOR(pattern)
 	scanner := bufio.NewScanner(f)
 	var b strings.Builder
 	lineNum := 0
@@ -416,7 +419,8 @@ func searchByKeyword(fullPath, filename, pattern string) string {
 	for scanner.Scan() {
 		lineNum++
 		line := scanner.Text()
-		if strings.Contains(strings.ToLower(line), patternLower) {
+		lineLower := strings.ToLower(line)
+		if matchesAnyOR(lineLower, orParts) {
 			if count < maxResults {
 				fmt.Fprintf(&b, "Строка %d: %s\n", lineNum, strings.TrimSpace(line))
 			}
@@ -437,6 +441,39 @@ func searchByKeyword(fullPath, filename, pattern string) string {
 	result.WriteString(":\n\n")
 	result.WriteString(b.String())
 	return result.String()
+}
+
+// splitOR разбивает паттерн по символу | для OR-поиска.
+// Обрезает пробелы у каждой части, отфильтровывает пустые.
+// Если после фильтрации частей не осталось, возвращает оригинальный паттерн как одну часть (fallback).
+func splitOR(pattern string) []string {
+	raw := strings.Split(pattern, "|")
+	var parts []string
+	for _, p := range raw {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			parts = append(parts, strings.ToLower(trimmed))
+		}
+	}
+	if len(parts) == 0 {
+		// Все части были пустыми — ищем literal "|"
+		return []string{strings.ToLower(pattern)}
+	}
+	return parts
+}
+
+// matchesAnyOR проверяет, содержит ли строка lineLower хотя бы одну из частей orParts.
+// Если orParts состоит из одного элемента — использует strings.Contains (оптимизация).
+func matchesAnyOR(lineLower string, orParts []string) bool {
+	if len(orParts) == 1 {
+		return strings.Contains(lineLower, orParts[0])
+	}
+	for _, part := range orParts {
+		if strings.Contains(lineLower, part) {
+			return true
+		}
+	}
+	return false
 }
 
 // searchByRegex ищет по регулярному выражению.

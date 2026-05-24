@@ -236,4 +236,59 @@ func TestBookTools(t *testing.T) {
 			t.Errorf("should find 'интерфейс' in markdown, got:\n%s", result)
 		}
 	})
+
+	t.Run("search_in_book_keyword_pipe_or", func(t *testing.T) {
+		result := executeTool(t, "search_in_book", "book_sample.txt Москва|Париж")
+		if !strings.Contains(result, "keyword") {
+			t.Errorf("should show keyword mode, got:\n%s", result)
+		}
+		if !strings.Contains(result, "Москва") {
+			t.Errorf("pipe OR should find 'Москва', got:\n%s", result)
+		}
+		if !strings.Contains(result, "Париж") {
+			t.Errorf("pipe OR should find 'Париж', got:\n%s", result)
+		}
+		if !strings.Contains(result, "Найдено") {
+			t.Errorf("pipe OR should find matches, got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_keyword_pipe_or_single_match", func(t *testing.T) {
+		result := executeTool(t, "search_in_book", "book_sample.txt Москва|ZZZZZ")
+		if !strings.Contains(result, "Москва") {
+			t.Errorf("pipe OR single match should find 'Москва', got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_keyword_pipe_leading", func(t *testing.T) {
+		result := executeTool(t, "search_in_book", "book_sample.txt |Москва")
+		if !strings.Contains(result, "Москва") {
+			t.Errorf("pipe OR with leading pipe should find 'Москва', got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_keyword_pipe_trailing", func(t *testing.T) {
+		result := executeTool(t, "search_in_book", "book_sample.txt Москва|")
+		if !strings.Contains(result, "Москва") {
+			t.Errorf("pipe OR with trailing pipe should find 'Москва', got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_keyword_pipe_double", func(t *testing.T) {
+		result := executeTool(t, "search_in_book", "book_sample.txt Москва||Париж")
+		if !strings.Contains(result, "Москва") {
+			t.Errorf("pipe OR with double pipe should find 'Москва', got:\n%s", result)
+		}
+		if !strings.Contains(result, "Париж") {
+			t.Errorf("pipe OR with double pipe should find 'Париж', got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_single_term_still_works", func(t *testing.T) {
+		// Regression test: single term without pipe should still work
+		result := executeTool(t, "search_in_book", "book_sample.txt Париж")
+		if !strings.Contains(result, "Париж") {
+			t.Errorf("single term should find 'Париж', got:\n%s", result)
+		}
+	})
 }
