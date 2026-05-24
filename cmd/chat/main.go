@@ -138,11 +138,13 @@ func main() {
 		OnToolResult: func(name, result string) {
 			preview := result
 			maxPreview := creative.ToolResultMaxPreview
-			if maxPreview > 0 && len(preview) > maxPreview {
-				preview = preview[:maxPreview] + "... " + colorGray + "[truncated]" + colorReset
+			if maxPreview < 0 {
+				maxPreview = 0
 			}
-			// Remove newlines in preview for single-line display when truncated
-			if maxPreview > 0 && len(result) > maxPreview {
+			isTruncated := maxPreview > 0 && len(result) > maxPreview
+			if isTruncated {
+				preview = result[:maxPreview] + "... " + colorGray + "[truncated]" + colorReset
+				// Replace newlines for compact single-line display
 				preview = strings.ReplaceAll(preview, "\n", " ↵ ")
 				fmt.Printf("%s  %s✅ %s%s → %s%s\n",
 					colorReset,

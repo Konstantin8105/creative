@@ -37,6 +37,13 @@ func NewChat(prv AIrunner) *Chat {
 	return &Chat{prv: prv}
 }
 
+// ensurePrv panics if the AIrunner provider is nil.
+func (ch *Chat) ensurePrv() {
+	if ch.prv == nil {
+		panic("creative: AIrunner provider is nil; use NewChat with a non-nil provider")
+	}
+}
+
 type Chat struct {
 	system   []string
 	msgs     []ChatMessage
@@ -74,6 +81,7 @@ func (ch *Chat) AddSystem(system ...string) {
 // (native tool_calls or legacy {{tool:...}} markers),
 // and returns the final response text.
 func (ch *Chat) Send(agentName, input string, isChat bool) (responce string, err error) {
+	ch.ensurePrv()
 	if len(ch.msgs) == 0 && 0 < len(ch.system) {
 		s := strings.Join(ch.system, "\n\n")
 		ch.msgs = append(ch.msgs, ChatMessage{Role: "system", Content: s})
@@ -115,6 +123,7 @@ func (ch *Chat) Send(agentName, input string, isChat bool) (responce string, err
 // Processes any tool calls and streams subsequent responses.
 // Returns the final response text.
 func (ch *Chat) SendStream(agentName, input string, isChat bool) (response string, err error) {
+	ch.ensurePrv()
 	if len(ch.msgs) == 0 && 0 < len(ch.system) {
 		s := strings.Join(ch.system, "\n\n")
 		ch.msgs = append(ch.msgs, ChatMessage{Role: "system", Content: s})
