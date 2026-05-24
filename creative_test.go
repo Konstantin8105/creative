@@ -33,31 +33,29 @@ func (ai TestAi) GetModels() (string, error) {
 	return ai.models, ai.error_models
 }
 
-func (ai *TestAi) Send(chs []creative.ChatMessage, isChat bool) (repsonce string, err error) {
+func (ai *TestAi) Send(chs []creative.ChatMessage, isChat bool, tools []creative.Tool) (creative.ChatMessage, error) {
 	if 0 < len(ai.rs) {
 		defer func() {
 			ai.counter++
 		}()
-		return ai.rs[ai.counter], nil
+		return creative.ChatMessage{Role: "assistant", Content: ai.rs[ai.counter]}, nil
 	}
-	return ai.resp, ai.err
+	return creative.ChatMessage{Role: "assistant", Content: ai.resp}, ai.err
 }
 
-func (ai *TestAi) SendStream(chs []creative.ChatMessage, isChat bool, callback func(chunk string)) (repsonce string, err error) {
+func (ai *TestAi) SendStream(chs []creative.ChatMessage, isChat bool, callback func(chunk string), tools []creative.Tool) (creative.ChatMessage, error) {
 	if 0 < len(ai.rs) {
 		var full strings.Builder
-		for i, r := range ai.rs {
+		for _, r := range ai.rs {
 			full.WriteString(r)
 			if callback != nil {
 				callback(r)
 			}
-			// Simulate continue for agent iterations
-			_ = i
 		}
-		return full.String(), nil
+		return creative.ChatMessage{Role: "assistant", Content: full.String()}, nil
 	}
 	if callback != nil {
 		callback(ai.resp)
 	}
-	return ai.resp, ai.err
+	return creative.ChatMessage{Role: "assistant", Content: ai.resp}, ai.err
 }

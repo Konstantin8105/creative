@@ -11,10 +11,14 @@ type AIrunner interface {
 
 	GetModels() (string, error)
 
-	Send(chs []ChatMessage, isChat bool) (repsonce string, err error)
+	// Send sends messages and returns the full assistant ChatMessage,
+	// which includes Content, ReasoningContent, and ToolCalls (if any).
+	// tools parameter contains available tool definitions.
+	Send(chs []ChatMessage, isChat bool, tools []Tool) (msg ChatMessage, err error)
 
 	// SendStream sends messages with streaming support.
 	// callback is called for each chunk of generated text.
-	// Returns the complete assembled response.
-	SendStream(chs []ChatMessage, isChat bool, callback func(chunk string)) (repsonce string, err error)
+	// Returns the complete assembled response ChatMessage.
+	// tools parameter contains available tool definitions.
+	SendStream(chs []ChatMessage, isChat bool, callback func(chunk string), tools []Tool) (msg ChatMessage, err error)
 }

@@ -30,23 +30,75 @@ func BookTools() []Tool {
 	return []Tool{
 		{
 			Name:        "list_books",
-			Description: "Показать список всех .txt и .md файлов в папке книг. Возвращает имена файлов, размер и количество строк.",
-			Execute:     listBooksTool,
+			Description: "List all .txt and .md files in the books folder. Returns file names, sizes, and line counts.",
+			Parameters: &ToolParameters{
+				Type:       "object",
+				Properties: map[string]ToolProperty{},
+				Required:   []string{},
+			},
+			Execute: listBooksTool,
 		},
 		{
 			Name:        "read_book_lines",
-			Description: "Прочитать строки из книги. Параметры: имя_файла начальная_строка конечная_строка. Нумерация строк с 1. Максимум 1000 строк за вызов. Пример: read_book_lines война_и_мир.txt 1 50",
-			Execute:     readBookLinesTool,
+			Description: "Read lines from a book. Parameters: filename, start_line, end_line. Line numbering starts at 1. Maximum 1000 lines per call. Example: read_book_lines book.txt 1 50",
+			Parameters: &ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"filename": {
+						Type:        "string",
+						Description: "Name of the book file (e.g., book.txt or book.md)",
+					},
+					"start_line": {
+						Type:        "integer",
+						Description: "Starting line number (1-based)",
+					},
+					"end_line": {
+						Type:        "integer",
+						Description: "Ending line number (inclusive, max 1000 lines from start)",
+					},
+				},
+				Required: []string{"filename", "start_line", "end_line"},
+			},
+			Execute: readBookLinesTool,
 		},
 		{
 			Name:        "search_in_book",
-			Description: "Поиск в книге по ключевым словам или регулярному выражению. Параметры: имя_файла \"паттерн\" [режим]. Режимы: keyword (поиск подстроки, по умолчанию) или regex. Пример: search_in_book война_и_мир.txt \"Наполеон\" или search_in_book file.md \"\\bGo\\b\" regex",
-			Execute:     searchInBookTool,
+			Description: "Search in a book by keywords or regular expression. Parameters: filename, pattern, mode (optional). Modes: keyword (substring search, default) or regex. Example: search_in_book book.txt \"Napoleon\" or search_in_book file.md \"\\bGo\\b\" regex",
+			Parameters: &ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"filename": {
+						Type:        "string",
+						Description: "Name of the book file (e.g., book.txt or book.md)",
+					},
+					"pattern": {
+						Type:        "string",
+						Description: "Search pattern: keyword or regular expression",
+					},
+					"mode": {
+						Type:        "string",
+						Description: "Search mode: 'keyword' (default, case-insensitive) or 'regex'",
+						Enum:        []string{"keyword", "regex"},
+					},
+				},
+				Required: []string{"filename", "pattern"},
+			},
+			Execute: searchInBookTool,
 		},
 		{
 			Name:        "book_info",
-			Description: "Показать мета-информацию о книге: размер, количество строк, количество символов, дата изменения. Параметры: имя_файла. Пример: book_info война_и_мир.txt",
-			Execute:     bookInfoTool,
+			Description: "Show meta-information about a book: size, line count, character count, modification date. Parameters: filename. Example: book_info book.txt",
+			Parameters: &ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"filename": {
+						Type:        "string",
+						Description: "Name of the book file (e.g., book.txt or book.md)",
+					},
+				},
+				Required: []string{"filename"},
+			},
+			Execute: bookInfoTool,
 		},
 	}
 }

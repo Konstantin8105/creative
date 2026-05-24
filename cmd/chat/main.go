@@ -25,6 +25,11 @@ func main() {
 		key         = flag.String("key", "", "API key for external provider (optional)")
 		timeout     = flag.Duration("timeout", 4*time.Hour, "Request timeout duration")
 		contextSize = flag.Int("context", 62000, "AI context window size in tokens")
+
+		// DeepSeek-specific flags
+		thinkingMode    = flag.Bool("thinking", false, "Enable DeepSeek thinking mode")
+		reasoningEffort = flag.String("reasoning-effort", "high", "Thinking mode effort level (high or max)")
+		userID          = flag.String("user-id", "", "User ID for rate limit isolation")
 	)
 
 	flag.Usage = func() {
@@ -58,11 +63,14 @@ func main() {
 
 	// Initialize AI provider
 	prv := creative.Provider{
-		Endpoint:       *endpoint,
-		Model:          *model,
-		Key:            *key,
-		RequestTimeout: *timeout,
-		ContextSize:    *contextSize,
+		Endpoint:        *endpoint,
+		Model:           *model,
+		Key:             *key,
+		RequestTimeout:  *timeout,
+		ContextSize:     *contextSize,
+		ThinkingMode:    *thinkingMode,
+		ReasoningEffort: *reasoningEffort,
+		UserID:          *userID,
 	}
 
 	// Create chat with provider

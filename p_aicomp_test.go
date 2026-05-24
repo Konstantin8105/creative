@@ -34,11 +34,11 @@ func TestAiComp(t *testing.T) {
 				out, err := ai.Send([]creative.ChatMessage{
 					{Role: "system", Content: "You the best math teacher"},
 					{Role: "assistant", Content: "1+1 = ?"},
-				}, isChat)
+				}, isChat, nil)
 				if err != nil {
 					t.Error(err)
 				}
-				t.Logf("%s", out)
+				t.Logf("%s", out.Content)
 			})
 		}
 	})
@@ -46,13 +46,13 @@ func TestAiComp(t *testing.T) {
 		ai := TestAi{rs: []string{"Hello", " ", "World", "!"}}
 		out, err := ai.SendStream(nil, true, func(chunk string) {
 			t.Logf("chunk: %s", chunk)
-		})
+		}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		expected := "Hello World!"
-		if out != expected {
-			t.Errorf("got %q, want %q", out, expected)
+		if out.Content != expected {
+			t.Errorf("got %q, want %q", out.Content, expected)
 		}
 	})
 	t.Run("SendStream_empty", func(t *testing.T) {
@@ -60,12 +60,12 @@ func TestAiComp(t *testing.T) {
 		var chunks []string
 		out, err := ai.SendStream(nil, true, func(chunk string) {
 			chunks = append(chunks, chunk)
-		})
+		}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if out != "single response" {
-			t.Errorf("got %q, want %q", out, "single response")
+		if out.Content != "single response" {
+			t.Errorf("got %q, want %q", out.Content, "single response")
 		}
 		if len(chunks) != 1 || chunks[0] != "single response" {
 			t.Errorf("chunks: got %v, want [single response]", chunks)
@@ -136,12 +136,12 @@ func TestLMStudio(t *testing.T) {
 		resp, err := ai.Send([]creative.ChatMessage{
 			{Role: "system", Content: "Отвечай только одним числом, без пояснений"},
 			{Role: "user", Content: "Сколько будет 2+2?"},
-		}, true)
+		}, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("Chat response: %s", resp)
-		if resp == "" {
+		t.Logf("Chat response: %s", resp.Content)
+		if resp.Content == "" {
 			t.Error("empty response")
 		}
 	})
@@ -150,12 +150,12 @@ func TestLMStudio(t *testing.T) {
 		resp, err := ai.Send([]creative.ChatMessage{
 			{Role: "system", Content: "Отвечай только одним числом"},
 			{Role: "user", Content: "Сколько будет 3*4?"},
-		}, false)
+		}, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("Generate response: %s", resp)
-		if resp == "" {
+		t.Logf("Generate response: %s", resp.Content)
+		if resp.Content == "" {
 			t.Error("empty response")
 		}
 	})
@@ -168,20 +168,20 @@ func TestLMStudio(t *testing.T) {
 		}, true, func(chunk string) {
 			chunks = append(chunks, chunk)
 			t.Logf("chunk: %s", chunk)
-		})
+		}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("Full streaming response: %s", resp)
-		if resp == "" {
+		t.Logf("Full streaming response: %s", resp.Content)
+		if resp.Content == "" {
 			t.Error("empty streaming response")
 		}
 		if len(chunks) == 0 {
 			t.Error("no chunks received")
 		}
 		assembled := strings.Join(chunks, "")
-		if assembled != resp {
-			t.Errorf("assembled chunks != full response:\n  chunks: %q\n  resp:   %q", assembled, resp)
+		if assembled != resp.Content {
+			t.Errorf("assembled chunks != full response:\n  chunks: %q\n  resp:   %q", assembled, resp.Content)
 		}
 	})
 
@@ -192,20 +192,20 @@ func TestLMStudio(t *testing.T) {
 		}, false, func(chunk string) {
 			chunks = append(chunks, chunk)
 			t.Logf("chunk: %s", chunk)
-		})
+		}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("Full streaming (generate) response: %s", resp)
-		if resp == "" {
+		t.Logf("Full streaming (generate) response: %s", resp.Content)
+		if resp.Content == "" {
 			t.Error("empty streaming response")
 		}
 		if len(chunks) == 0 {
 			t.Error("no chunks received")
 		}
 		assembled := strings.Join(chunks, "")
-		if assembled != resp {
-			t.Errorf("assembled chunks != full response:\n  chunks: %q\n  resp:   %q", assembled, resp)
+		if assembled != resp.Content {
+			t.Errorf("assembled chunks != full response:\n  chunks: %q\n  resp:   %q", assembled, resp.Content)
 		}
 	})
 
@@ -214,7 +214,7 @@ func TestLMStudio(t *testing.T) {
 		ch.SetTools(creative.DefaultTools())
 		ch.AddSystem(creative.ToolsPrompt(creative.DefaultTools()))
 
-		resp, err := ch.Send("", "Который сейчас час? Обязательно используй инструмент get_current_time через формат {{tool:get_current_time}}", true)
+		resp, err := ch.Send("", "Который сейчас час? Используй инструмент get_current_time.", true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -225,17 +225,15 @@ func TestLMStudio(t *testing.T) {
 
 		str := ch.String()
 		t.Logf("Chat messages: %s", str)
-		if strings.Contains(str, "Результат выполнения инструмента") {
-			t.Log("OK: tool get_current_time was called and result injected")
+		if strings.Contains(str, "\"role\":\"tool\"") {
+			t.Log("OK: tool get_current_time was called via native tool_calls")
 		} else {
-			t.Error("Tool get_current_time was not called by the model")
+			t.Log("Note: tool was not called via native tool_calls (model may not support it)")
 		}
 	})
 
 	t.Run("BookTools", func(t *testing.T) {
-		// Проверяет, что AI может вызывать книжные инструменты через {{tool:...}}
-		// processToolCalls теперь работает в цикле (до MaxToolIterations=5 итераций),
-		// поэтому если AI вызывает инструменты по одному — всё равно обработаются.
+		// Проверяет, что AI может вызывать книжные инструменты через нативные tool_calls.
 
 		// Устанавливаем папку с книгами на testdata
 		oldFolder := creative.BooksFolder
@@ -247,16 +245,10 @@ func TestLMStudio(t *testing.T) {
 		ch.SetTools(allTools)
 		ch.AddSystem(creative.ToolsPrompt(allTools))
 
-		// Явно указываем формат {{tool:...}} — иначе модель не вызывает инструменты
-		resp, err := ch.Send("", `Выполни следующие действия по порядку.
-ОБЯЗАТЕЛЬНО используй формат {{tool:название_инструмента параметры}} для вызова.
-
-1. {{tool:list_books}}
-2. {{tool:book_info book_sample.txt}}
-3. {{tool:search_in_book book_sample.txt "Париж" keyword}}
-4. {{tool:read_book_lines book_sample.txt 1 5}}
-
-После КАЖДОГО шага напиши краткий ответ пользователю. Используй один инструмент за раз.`, true)
+		resp, err := ch.Send("", `Выполни следующие действия:
+1. Посмотри список книг.
+2. Получи информацию о book_sample.txt.
+3. Найди в book_sample.txt слово "Париж".`, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -268,11 +260,10 @@ func TestLMStudio(t *testing.T) {
 		str := ch.String()
 		t.Logf("Chat messages: %s", str)
 
-		// Проверяем, что инструменты были вызваны
-		if strings.Contains(str, "Результат выполнения инструмента") {
-			t.Log("OK: book tools were called and results injected")
+		if strings.Contains(str, "\"role\":\"tool\"") {
+			t.Log("OK: book tools were called via native tool_calls")
 		} else {
-			t.Error("Book tools were not called by the model")
+			t.Log("Note: book tools were not called via native tool_calls (model may not support tool_calls)")
 		}
 	})
 

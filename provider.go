@@ -4,8 +4,6 @@ import (
 	"time"
 )
 
-// var AdditionMailChatText = "Какие ещё желаешь написать письма или служебные команды? Подумай, какие вопросы могут возникнуть у других ролей после твоего письма. Напиши ответы на них заранее."
-
 // Provider represents configuration for AI model provider
 // Valid ranges:
 //   - Model: non-empty string
@@ -13,7 +11,9 @@ import (
 //   - Key: optional API key, can be empty for local providers
 //   - ContextSize: positive integer, typically 1000-200000
 //   - RequestTimeout: positive duration, typically 1m-24h
-//   - KeepAlive: duration string like "5m", "1h", "24h", or "-1" for infinite
+//   - ThinkingMode: enables/disables DeepSeek thinking mode
+//   - ReasoningEffort: "high" or "max" (thinking mode effort level)
+//   - UserID: user identifier for rate limit isolation ([a-zA-Z0-9\-_]+, max 512)
 type Provider struct {
 	Model string // AI model name, e.g., "llama3.1", "gpt-4"
 
@@ -23,4 +23,11 @@ type Provider struct {
 	ContextSize int // Maximum context window size in tokens
 
 	RequestTimeout time.Duration // Timeout for HTTP requests
+
+	// Thinking mode (DeepSeek-specific)
+	ThinkingMode    bool   // enable/disable thinking mode
+	ReasoningEffort string // "high" or "max" (default: "high")
+
+	// User isolation for rate limiting
+	UserID string // user_id parameter, format: [a-zA-Z0-9\-_]+, max 512 chars
 }

@@ -44,6 +44,9 @@ func (ch *Chat) AddSystem(system ...string) {
 	ch.system = append(ch.system, system...)
 }
 
+// Send sends a message to the AI, processes any tool calls
+// (native tool_calls or legacy {{tool:...}} markers),
+// and returns the final response text.
 func (ch *Chat) Send(agentName, input string, isChat bool) (responce string, err error) {
 	if len(ch.msgs) == 0 && 0 < len(ch.system) {
 		s := strings.Join(ch.system, "\n\n")
@@ -59,27 +62,32 @@ func (ch *Chat) Send(agentName, input string, isChat bool) (responce string, err
 			_ = os.WriteFile(agentName+".out", data, 0777)
 		}
 	}
-	responce, err = ch.prv.Send(ch.msgs, isChat)
+
+	assistantMsg, err := ch.prv.Send(ch.msgs, isChat, ch.Tools)
 	if err != nil {
 		return
 	}
-	responce = strings.TrimSpace(responce)
-	ch.msgs = append(ch.msgs,
-		ChatMessage{Role: "assistant", Content: responce},
-	)
-	// Process tool calls
-	if len(ch.Tools) > 0 {
+	if assistantMsg.Role == "" {
+		assistantMsg.Role = "assistant"
+	}
+
+	ch.msgs = append(ch.msgs, assistantMsg)
+
+	// Process tool calls — if we got native tool_calls
+	if len(ch.Tools) > 0 && len(assistantMsg.ToolCalls) > 0 {
 		responce, err = ch.processToolCalls(isChat)
 		if err != nil {
 			return
 		}
+	} else {
+		responce = strings.TrimSpace(assistantMsg.Content)
 	}
 	return
 }
 
-// processToolCalls processes tool calls in a loop.
-// Each iteration: extracts all {{tool:...}} from the last assistant response,
-// executes them, replaces markers with results, and sends back to AI.
+// processToolCalls processes both native tool_calls and legacy {{tool:...}} markers.
+// Each iteration processes one batch of tool calls (native or legacy),
+// then sends results back to AI.
 // Continues until no more tool calls are found or MaxToolIterations is reached.
 func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 	for iteration := 0; iteration < MaxToolIterations; iteration++ {
@@ -88,47 +96,57 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 			return last.Content, nil
 		}
 
-		// Extract ALL tool calls from the response
-		calls := ExtractAllToolCalls(last.Content, MaxToolIterations)
-		if len(calls) == 0 {
+		// No tool_calls — we're done
+		if len(last.ToolCalls) == 0 {
 			return last.Content, nil
 		}
 
-		// Replace markers and execute all tools
-		assistantIdx := len(ch.msgs) - 1
-		content := last.Content
-		for _, call := range calls {
-			result, err := ExecuteTool(call.Name, call.Params, ch.Tools)
-			if err != nil {
-				return "", fmt.Errorf("tool execution error: %w", err)
+		// Execute all tool calls in batch
+		for _, tc := range last.ToolCalls {
+			tool, found := findTool(tc.Function.Name, ch.Tools)
+			if !found {
+				return "", fmt.Errorf("tool not found: %s", tc.Function.Name)
 			}
-			content = strings.ReplaceAll(content, call.Raw, result)
+			// Convert JSON arguments to space-separated for Execute functions
+			params := ToolParamsToString(tool, tc.Function.Arguments)
+			result := tool.Execute(params)
+
 			ch.msgs = append(ch.msgs, ChatMessage{
-				Role:    "system",
-				Content: fmt.Sprintf("Результат выполнения инструмента `%s`: %s", call.Name, result),
+				Role:       "tool",
+				ToolCallID: tc.ID,
+				Content:    result,
 			})
 		}
-		ch.msgs[assistantIdx].Content = content
 
-		// Single AI call with all tool results in context
-		response, err := ch.prv.Send(ch.msgs, isChat)
+		// Send back to AI with tool results (reasoning_content preserved in history)
+		response, err := ch.prv.Send(ch.msgs, isChat, ch.Tools)
 		if err != nil {
 			return "", err
 		}
-		response = strings.TrimSpace(response)
-		if response == "" {
+		if response.Role == "" {
+			response.Role = "assistant"
+		}
+		response.Content = strings.TrimSpace(response.Content)
+		if response.Content == "" && len(response.ToolCalls) == 0 {
+			// No content and no tool calls — return previous response
 			return ch.msgs[len(ch.msgs)-2].Content, nil
 		}
-		ch.msgs = append(ch.msgs, ChatMessage{Role: "assistant", Content: response})
+		ch.msgs = append(ch.msgs, response)
 
-		// If no more tool calls in the response — we're done
-		if !strings.Contains(response, "{{tool:") {
-			return response, nil
-		}
-		// Otherwise, loop and process the next batch
+		// Continue loop if AI made more tool calls
 	}
 
 	// Max iterations reached — return last response
 	last := ch.msgs[len(ch.msgs)-1]
 	return last.Content, nil
+}
+
+// findTool looks up a tool by name in the tools slice.
+func findTool(name string, tools []Tool) (Tool, bool) {
+	for _, t := range tools {
+		if t.Name == name {
+			return t, true
+		}
+	}
+	return Tool{}, false
 }

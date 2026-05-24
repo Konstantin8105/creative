@@ -229,26 +229,6 @@ func TestBookTools(t *testing.T) {
 		}
 	})
 
-	t.Run("extract_and_execute", func(t *testing.T) {
-		// Тест: что через ExtractToolCall + ExecuteTool всё работает
-		text := "Посмотри информацию о {{tool:book_info book_sample.txt}}"
-		name, params, found := creative.ExtractToolCall(text)
-		if !found {
-			t.Fatal("tool call not found")
-		}
-		if name != "book_info" {
-			t.Fatalf("got name %q, want book_info", name)
-		}
-		if params != "book_sample.txt" {
-			t.Fatalf("got params %q, want book_sample.txt", params)
-		}
-		// Execute через ExecuteTool
-		_, err := creative.ExecuteTool(name, params, tools)
-		if err != nil {
-			t.Fatalf("ExecuteTool error: %v", err)
-		}
-	})
-
 	t.Run("search_in_book_markdown", func(t *testing.T) {
 		result := executeTool(t, "search_in_book", "book_sample.md интерфейс keyword")
 		if !strings.Contains(result, "интерфейс") || !strings.Contains(result, "Строка") {

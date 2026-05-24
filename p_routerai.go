@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	
 	"fmt"
 	"io"
 	"net/http"
@@ -14,7 +13,7 @@ import (
 
 var _ AIrunner = new(RouterAI)
 
-// RouterAI is an AI provider implementation for RouterAI (OpenAI-compatible) API.
+// RouterAI is an AI provider implementation for OpenAI-compatible API (DeepSeek, etc.).
 // It embeds Provider configuration and implements AIrunner interface.
 type RouterAI Provider
 
@@ -51,24 +50,56 @@ func (o RouterAI) buildEndpoint(isChat bool) string {
 	return endpoint
 }
 
-// requestBody builds the JSON request body for the RouterAI API.
-func (o RouterAI) requestBody(messages []ChatMessage, isChat bool, stream bool) interface{} {
-	type request struct {
-		Model       string        `json:"model"`
-		Messages    []ChatMessage `json:"messages,omitempty"`
-		Prompt      string        `json:"prompt,omitempty"`
-		Stream      bool          `json:"stream"`
-		Temperature float64       `json:"temperature,omitempty"`
-		MaxTokens   int           `json:"max_tokens,omitempty"`
-		TopP        float64       `json:"top_p,omitempty"`
-	}
+// openAIRequest is the full request body for the OpenAI Chat Completions API.
+type openAIRequest struct {
+	Model           string                   `json:"model"`
+	Messages        []ChatMessage            `json:"messages,omitempty"`
+	Prompt          string                   `json:"prompt,omitempty"`
+	Stream          bool                     `json:"stream"`
+	Temperature     float64                  `json:"temperature,omitempty"`
+	MaxTokens       int                      `json:"max_tokens,omitempty"`
+	TopP            float64                  `json:"top_p,omitempty"`
+	Thinking        *thinkingParam           `json:"thinking,omitempty"`
+	ReasoningEffort string                   `json:"reasoning_effort,omitempty"`
+	Tools           []map[string]interface{} `json:"tools,omitempty"`
+	ToolChoice      interface{}              `json:"tool_choice,omitempty"`
+	UserID          string                   `json:"user_id,omitempty"`
+}
 
-	body := request{
+type thinkingParam struct {
+	Type string `json:"type"` // "enabled" or "disabled"
+}
+
+// requestBody builds the JSON request body for the RouterAI API.
+func (o RouterAI) requestBody(messages []ChatMessage, isChat bool, stream bool, tools []Tool) interface{} {
+	body := openAIRequest{
 		Model:       o.Model,
 		Stream:      stream,
 		Temperature: 0.7,
 		MaxTokens:   o.ContextSize,
 		TopP:        0.9,
+	}
+
+	// Thinking mode (DeepSeek-specific)
+	if o.ThinkingMode {
+		body.Thinking = &thinkingParam{Type: "enabled"}
+		if o.ReasoningEffort != "" {
+			body.ReasoningEffort = o.ReasoningEffort
+		} else {
+			body.ReasoningEffort = "high"
+		}
+	}
+
+	// User ID for rate limit isolation
+	if o.UserID != "" {
+		body.UserID = o.UserID
+	}
+
+	// Native tools format (only tools with Parameters defined)
+	nativeTools := ToolsToOpenAI(tools)
+	if len(nativeTools) > 0 {
+		body.Tools = nativeTools
+		body.ToolChoice = "auto"
 	}
 
 	if isChat {
@@ -83,6 +114,26 @@ func (o RouterAI) requestBody(messages []ChatMessage, isChat bool, stream bool) 
 	}
 
 	return body
+}
+
+// openAIResponse is the response structure from the OpenAI Chat Completions API.
+type openAIResponse struct {
+	ID      string `json:"id"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index   int `json:"index"`
+		Message struct {
+			Role             string     `json:"role"`
+			Content          string     `json:"content"`
+			ReasoningContent string     `json:"reasoning_content"`
+			ToolCalls        []ToolCall `json:"tool_calls"`
+		} `json:"message"`
+		Text string `json:"text"`
+	} `json:"choices"`
+	Usage struct {
+		PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
+		PromptCacheMissTokens int `json:"prompt_cache_miss_tokens"`
+	} `json:"usage"`
 }
 
 // defaults sets default values for unset fields.
@@ -101,7 +152,8 @@ func (o *RouterAI) defaults() {
 	}
 }
 
-func (o RouterAI) Send(messages []ChatMessage, isChat bool) (response string, err error) {
+// Send sends messages to the AI and returns the full assistant response message.
+func (o RouterAI) Send(messages []ChatMessage, isChat bool, tools []Tool) (response ChatMessage, err error) {
 	if o.Endpoint == "" {
 		err = fmt.Errorf("empty endpoint")
 		return
@@ -118,7 +170,7 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool) (response string, er
 	}
 
 	endpoint := o.buildEndpoint(isChat)
-	body := o.requestBody(messages, isChat, false)
+	body := o.requestBody(messages, isChat, false, tools)
 
 	jsonData, err := json.Marshal(body)
 	if err != nil {
@@ -159,34 +211,32 @@ func (o RouterAI) Send(messages []ChatMessage, isChat bool) (response string, er
 		return
 	}
 
-	rb := struct {
-		ID      string `json:"id"`
-		Model   string `json:"model"`
-		Choices []struct {
-			Text    string `json:"text"`
-			Message struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}{}
+	var rb openAIResponse
 	if err = json.Unmarshal(data, &rb); err != nil {
 		err = fmt.Errorf("unmarshal error: %w", err)
 		return
 	}
 	if len(rb.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
+		err = fmt.Errorf("no choices in response")
+		return
 	}
+
+	response.Role = "assistant"
 	if isChat {
-		return rb.Choices[0].Message.Content, nil
+		response.Content = rb.Choices[0].Message.Content
+		response.ReasoningContent = rb.Choices[0].Message.ReasoningContent
+		response.ToolCalls = rb.Choices[0].Message.ToolCalls
+	} else {
+		response.Content = rb.Choices[0].Text
 	}
-	return rb.Choices[0].Text, nil
+
+	return
 }
 
 // SendStream sends messages with streaming support.
 // callback is called for each chunk of generated text.
-// Returns the complete assembled response.
-func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(chunk string)) (response string, err error) {
+// Returns the complete assembled response message.
+func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(chunk string), tools []Tool) (response ChatMessage, err error) {
 	if o.Endpoint == "" {
 		err = fmt.Errorf("empty endpoint")
 		return
@@ -203,7 +253,7 @@ func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(
 	}
 
 	endpoint := o.buildEndpoint(isChat)
-	body := o.requestBody(messages, isChat, true)
+	body := o.requestBody(messages, isChat, true, tools)
 
 	jsonData, err := json.Marshal(body)
 	if err != nil {
@@ -253,12 +303,12 @@ func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Skip empty lines
+		// Skip empty lines (keep-alive mechanism)
 		if line == "" {
 			continue
 		}
 
-		// Skip lines that don't start with "data: "
+		// Skip lines that don't start with "data: " (keep-alive comments like ": keep-alive")
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
@@ -276,7 +326,9 @@ func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(
 		var chunk struct {
 			Choices []struct {
 				Delta struct {
-					Content string `json:"content"`
+					Content          string     `json:"content"`
+					ReasoningContent string     `json:"reasoning_content"`
+					ToolCalls        []ToolCall `json:"tool_calls"`
 				} `json:"delta"`
 				Text string `json:"text"`
 			} `json:"choices"`
@@ -291,26 +343,34 @@ func (o RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func(
 			continue
 		}
 
-		var content string
 		if isChat {
-			content = chunk.Choices[0].Delta.Content
+			content := chunk.Choices[0].Delta.Content
+			if content != "" {
+				full.WriteString(content)
+				if callback != nil {
+					callback(content)
+				}
+			}
+			// reasoning_content in stream chunks is not accumulated here;
+			// the streaming response only provides final content.
 		} else {
-			content = chunk.Choices[0].Text
-		}
-
-		if content == "" {
-			continue
-		}
-
-		full.WriteString(content)
-		if callback != nil {
-			callback(content)
+			content := chunk.Choices[0].Text
+			if content != "" {
+				full.WriteString(content)
+				if callback != nil {
+					callback(content)
+				}
+			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return full.String(), fmt.Errorf("stream read error: %w", err)
+		response.Role = "assistant"
+		response.Content = full.String()
+		return response, fmt.Errorf("stream read error: %w", err)
 	}
 
-	return full.String(), nil
+	response.Role = "assistant"
+	response.Content = full.String()
+	return
 }
