@@ -52,6 +52,9 @@ func main() {
 		thinkingMode    = flag.Bool("thinking", false, "Enable DeepSeek thinking mode")
 		reasoningEffort = flag.String("reasoning-effort", "high", "Thinking mode effort level (high or max)")
 		userID          = flag.String("user-id", "", "User ID for rate limit isolation")
+
+		// Mode selection: book type
+		psyMode = flag.Bool("psy", false, "Psychology book analysis mode (uses psychology system prompt)")
 	)
 
 	flag.Usage = func() {
@@ -99,8 +102,12 @@ func main() {
 	prvAI := creative.NewRouterAI(prv)
 	ch := creative.NewChat(prvAI)
 
-	// Add system prompt for book analysis
-	ch.AddSystem(creative.BookSystemPrompt())
+	// Add system prompt based on mode
+	if *psyMode {
+		ch.AddSystem(creative.PsySystemPrompt())
+	} else {
+		ch.AddSystem(creative.BookSystemPrompt())
+	}
 
 	// Combine tools: default + book tools
 	tools := append(creative.DefaultTools(), creative.BookTools()...)

@@ -14,9 +14,17 @@ import (
 //go:embed book_system_prompt.txt
 var bookSystemPromptFile []byte
 
+//go:embed psy_system_prompt.txt
+var psySystemPromptFile []byte
+
 // BookSystemPrompt возвращает встроенный системный промпт для работы с книгами.
 func BookSystemPrompt() string {
 	return string(bookSystemPromptFile)
+}
+
+// PsySystemPrompt возвращает встроенный системный промпт для работы с книгами по психологии.
+func PsySystemPrompt() string {
+	return string(psySystemPromptFile)
 }
 
 // BooksFolder — путь к папке с книгами.
