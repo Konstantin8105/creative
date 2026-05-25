@@ -277,7 +277,7 @@ func TestLMStudio(t *testing.T) {
 		ch.SetTools(creative.DefaultTools())
 		ch.AddSystem(creative.ToolsPrompt(creative.DefaultTools()))
 
-		resp, err := ch.Send("", "Который сейчас час? Используй инструмент get_current_time.", true)
+		resp, err := ch.Send("Который сейчас час? Используй инструмент get_current_time.", true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -308,7 +308,7 @@ func TestLMStudio(t *testing.T) {
 		ch.SetTools(allTools)
 		ch.AddSystem(creative.ToolsPrompt(allTools))
 
-		resp, err := ch.Send("", `Выполни следующие действия:
+		resp, err := ch.Send(`Выполни следующие действия:
 1. Посмотри список книг.
 2. Получи информацию о book_sample.txt.
 3. Найди в book_sample.txt слово "Париж".`, true)

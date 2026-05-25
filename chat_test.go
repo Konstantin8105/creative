@@ -11,7 +11,7 @@ func TestChat(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		prv := TestAi{}
 		ch := creative.NewChat(&prv)
-		_, err := ch.Send("", "Hello", false)
+		_, err := ch.Send("Hello", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -20,7 +20,7 @@ func TestChat(t *testing.T) {
 	t.Run("responce", func(t *testing.T) {
 		prv := TestAi{resp: "My name"}
 		ch := creative.NewChat(&prv)
-		_, err := ch.Send("", "Hello", false)
+		_, err := ch.Send("Hello", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -30,7 +30,7 @@ func TestChat(t *testing.T) {
 		prv := TestAi{resp: "My name"}
 		ch := creative.NewChat(&prv)
 		ch.AddSystem("info of agent system")
-		_, err := ch.Send("", "Hello", false)
+		_, err := ch.Send("Hello", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -42,7 +42,7 @@ func TestChat(t *testing.T) {
 		ch.AddSystem("info of agent system")
 		for _, s := range []string{"QWE", "WER", "ERT"} {
 			prv.resp = "OUT:" + s
-			_, err := ch.Send("", "IN:"+s, false)
+			_, err := ch.Send("IN:"+s, false)
 			if err != nil {
 				t.Fatal(err)
 			}

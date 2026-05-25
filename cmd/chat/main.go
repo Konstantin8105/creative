@@ -211,7 +211,7 @@ func main() {
 		fmt.Printf("\n%s  🎯 %s%s%s\n\n", colorBold+colorGreen, colorReset, input, colorReset)
 
 		// Send to AI with streaming
-		_, err := ch.SendStream("chat", input, true)
+		_, err := ch.SendStream(input, true)
 		if err != nil {
 			fmt.Printf("\n%s  ⚠️  Error:%s %v%s\n\n", colorBold+colorRed, colorReset, err, colorReset)
 			continue

@@ -3,7 +3,6 @@ package creative
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -14,11 +13,6 @@ var MaxToolIterations = 20
 // Set to 0 for full (untruncated) output.
 // Default is 200 characters.
 var ToolResultMaxPreview = 200
-
-// DebugAgentOutput controls whether agent chat state is written to .out files.
-var (
-	DebugAgentOutput = true
-)
 
 // ChatEventCallback receives live updates during Chat.SendStream().
 // All callbacks are optional (nil = no callback).
@@ -80,7 +74,7 @@ func (ch *Chat) AddSystem(system ...string) {
 // Send sends a message to the AI, processes any tool calls
 // (native tool_calls or legacy {{tool:...}} markers),
 // and returns the final response text.
-func (ch *Chat) Send(agentName, input string, isChat bool) (responce string, err error) {
+func (ch *Chat) Send(input string, isChat bool) (responce string, err error) {
 	ch.ensurePrv()
 	if len(ch.msgs) == 0 && 0 < len(ch.system) {
 		s := strings.Join(ch.system, "\n\n")
@@ -89,12 +83,6 @@ func (ch *Chat) Send(agentName, input string, isChat bool) (responce string, err
 	ch.msgs = append(ch.msgs,
 		ChatMessage{Role: "user", Content: input},
 	)
-	if DebugAgentOutput && agentName != "" {
-		data, err := json.MarshalIndent(ch.msgs, "", "  ")
-		if err == nil {
-			_ = os.WriteFile(agentName+".out", data, 0777)
-		}
-	}
 
 	assistantMsg, err := ch.prv.Send(ch.msgs, isChat, ch.Tools)
 	if err != nil {
@@ -122,7 +110,7 @@ func (ch *Chat) Send(agentName, input string, isChat bool) (responce string, err
 // The assistant's response text is streamed via the callback set by SetCallback().
 // Processes any tool calls and streams subsequent responses.
 // Returns the final response text.
-func (ch *Chat) SendStream(agentName, input string, isChat bool) (response string, err error) {
+func (ch *Chat) SendStream(input string, isChat bool) (response string, err error) {
 	ch.ensurePrv()
 	if len(ch.msgs) == 0 && 0 < len(ch.system) {
 		s := strings.Join(ch.system, "\n\n")
@@ -131,12 +119,6 @@ func (ch *Chat) SendStream(agentName, input string, isChat bool) (response strin
 	ch.msgs = append(ch.msgs,
 		ChatMessage{Role: "user", Content: input},
 	)
-	if DebugAgentOutput && agentName != "" {
-		data, err := json.MarshalIndent(ch.msgs, "", "  ")
-		if err == nil {
-			_ = os.WriteFile(agentName+".out", data, 0777)
-		}
-	}
 
 	// Build the streaming callback that routes to ChatEventCallback
 	streamCB := func(chunkType, chunk string) {
