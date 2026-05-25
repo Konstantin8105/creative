@@ -368,21 +368,9 @@ body {
 <script>
 /* ─── Session ─── */
 (function() {
-  // generateUUID produces a UUID v4 string. Falls back from crypto.randomUUID
-  // to crypto.getRandomValues (works in all browsers over plain HTTP).
-  function generateUUID() {
-    if (typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-    // Fallback using crypto.getRandomValues — works over plain HTTP
-    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-    );
-  }
-
   let sessionId = sessionStorage.getItem('session_id');
   if (!sessionId) {
-    sessionId = generateUUID();
+    sessionId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
     sessionStorage.setItem('session_id', sessionId);
   }
 
