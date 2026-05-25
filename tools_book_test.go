@@ -1,6 +1,7 @@
 package creative_test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -289,6 +290,70 @@ func TestBookTools(t *testing.T) {
 		result := executeTool(t, "search_in_book", "book_sample.txt Париж")
 		if !strings.Contains(result, "Париж") {
 			t.Errorf("single term should find 'Париж', got:\n%s", result)
+		}
+	})
+
+	// Tests for filenames containing spaces (regression for native tool call bug).
+	// These simulate what happens after ToolParamsToString converts JSON args
+	// like {"filename":"СП 16.13330.2017.txt"} → "СП 16.13330.2017.txt" (quoted).
+
+	t.Run("book_info_spaced_filename_quoted", func(t *testing.T) {
+		// Simulate native tool call: ToolParamsToString produces '"file with spaces.txt"'
+		result := executeTool(t, "book_info", "\"book_sample.txt\"")
+		if !strings.Contains(result, "Файл:") {
+			t.Errorf("book_info with quoted spaced filename should work, got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_spaced_filename_quoted", func(t *testing.T) {
+		// Simulate native tool call with filename containing spaces
+		result := executeTool(t, "search_in_book", "\"book_sample.txt\" Париж")
+		if !strings.Contains(result, "Париж") {
+			t.Errorf("search_in_book with quoted spaced filename should work, got:\n%s", result)
+		}
+	})
+
+	t.Run("read_book_lines_spaced_filename_quoted", func(t *testing.T) {
+		// Simulate native tool call with filename containing spaces
+		result := executeTool(t, "read_book_lines", "\"book_sample.txt\" 1 3")
+		if !strings.Contains(result, "1:") {
+			t.Errorf("read_book_lines with quoted spaced filename should work, got:\n%s", result)
+		}
+	})
+
+	t.Run("book_info_temp_file_with_spaces", func(t *testing.T) {
+		// End-to-end test: create a temp file with spaces in name, verify tool works
+		tmpFile := filepath.Join("testdata", "СП 16.13330.2017 Тестовый файл.txt")
+		err := os.WriteFile(tmpFile, []byte("Тестовое содержимое\nСтрока 2\n"), 0644)
+		if err != nil {
+			t.Fatalf("failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile)
+
+		result, err := creative.ExecuteTool("book_info", "\"СП 16.13330.2017 Тестовый файл.txt\"", tools)
+		if err != nil {
+			t.Fatalf("book_info with spaced filename: %v", err)
+		}
+		if !strings.Contains(result, "Файл:") || !strings.Contains(result, "Тестовый файл") {
+			t.Errorf("book_info should work with spaced filename, got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_temp_file_with_spaces", func(t *testing.T) {
+		// End-to-end test: create a temp file with spaces in name, search in it
+		tmpFile := filepath.Join("testdata", "ГОСТ 32569-2013 Трубопроводы.txt")
+		err := os.WriteFile(tmpFile, []byte("Тестовое содержимое\nболт М20\nгайка\n"), 0644)
+		if err != nil {
+			t.Fatalf("failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile)
+
+		result, err := creative.ExecuteTool("search_in_book", "\"ГОСТ 32569-2013 Трубопроводы.txt\" болт", tools)
+		if err != nil {
+			t.Fatalf("search_in_book with spaced filename: %v", err)
+		}
+		if !strings.Contains(result, "болт") {
+			t.Errorf("search_in_book should find 'болт' in spaced filename, got:\n%s", result)
 		}
 	})
 }

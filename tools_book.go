@@ -528,6 +528,9 @@ func bookInfoTool(params string) string {
 		return "Ошибка: не указано имя файла. Используйте: book_info имя_файла"
 	}
 
+	// Strip surrounding quotes if present (e.g. from native tool call conversion)
+	params = strings.Trim(params, "\"")
+
 	fullPath, errMsg := resolveFile(params)
 	if errMsg != "" {
 		return errMsg

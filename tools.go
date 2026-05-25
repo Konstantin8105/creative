@@ -87,7 +87,13 @@ func ToolParamsToString(tool Tool, jsonArgs string) string {
 	// Use Required order for deterministic output
 	for _, key := range tool.Parameters.Required {
 		if val, ok := args[key]; ok {
-			parts = append(parts, fmt.Sprintf("%v", val))
+			strVal := fmt.Sprintf("%v", val)
+			// Wrap values containing spaces in quotes so downstream parsing
+			// (strings.Fields) preserves them as a single token.
+			if strings.Contains(strVal, " ") {
+				strVal = `"` + strVal + `"`
+			}
+			parts = append(parts, strVal)
 		}
 	}
 	if len(parts) > 0 {
