@@ -319,9 +319,10 @@ func (ch *Chat) processToolCallsStream(isChat bool) (string, error) {
 }
 
 // Stop cancels an ongoing AI operation for this chat.
-// This delegates to the underlying AIrunner implementation.
+// RouterAI is shared across all sessions, so Stop is a no-op.
+// Each HTTP request has its own context and timeout.
 func (ch *Chat) Stop() error {
-	return ch.prv.Stop()
+	return nil
 }
 
 // findTool looks up a tool by name in the tools slice.

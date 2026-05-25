@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -19,9 +18,6 @@ var _ AIrunner = new(RouterAI)
 // It embeds Provider configuration and implements AIrunner interface.
 type RouterAI struct {
 	Provider
-
-	mu     sync.Mutex
-	cancel context.CancelFunc
 }
 
 // NewRouterAI creates a new RouterAI from a Provider configuration.
@@ -29,37 +25,9 @@ func NewRouterAI(prv Provider) *RouterAI {
 	return &RouterAI{Provider: prv}
 }
 
-// setCancel stores the cancel function and returns a derived context.
-func (o *RouterAI) setCancel() context.Context {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	// Cancel any previous operation
-	if o.cancel != nil {
-		o.cancel()
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	o.cancel = cancel
-	return ctx
-}
-
-// clearCancel removes the stored cancel function.
-func (o *RouterAI) clearCancel() {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.cancel != nil {
-		o.cancel()
-		o.cancel = nil
-	}
-}
-
-// Stop cancels an ongoing Send or SendStream operation.
+// Stop is a no-op. Cancellation is handled per-request via context.WithTimeout.
+// RouterAI is shared across sessions, so there is no single operation to cancel.
 func (o *RouterAI) Stop() error {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.cancel != nil {
-		o.cancel()
-		o.cancel = nil
-	}
 	return nil
 }
 
@@ -240,10 +208,6 @@ func (o *RouterAI) Send(messages []ChatMessage, isChat bool, tools []Tool) (resp
 		o.ContextSize = 4096
 	}
 
-	// Create cancellable context
-	ctx := o.setCancel()
-	defer o.clearCancel()
-
 	endpoint := o.buildEndpoint(isChat)
 	body := o.requestBody(messages, isChat, false, tools)
 
@@ -254,7 +218,7 @@ func (o *RouterAI) Send(messages []ChatMessage, isChat bool, tools []Tool) (resp
 	}
 
 	client := &http.Client{Timeout: o.RequestTimeout}
-	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(context.Background(), "POST", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		err = fmt.Errorf("create request error: %w", err)
 		return
@@ -328,10 +292,6 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 		o.ContextSize = 4096
 	}
 
-	// Create cancellable context
-	ctx := o.setCancel()
-	defer o.clearCancel()
-
 	endpoint := o.buildEndpoint(isChat)
 	body := o.requestBody(messages, isChat, true, tools)
 
@@ -342,7 +302,7 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 	}
 
 	client := &http.Client{Timeout: o.RequestTimeout}
-	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(context.Background(), "POST", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		err = fmt.Errorf("create request error: %w", err)
 		return
@@ -378,11 +338,6 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max line length
 
-	// Goroutine to cancel context on context done
-	// to ensure scanner.Scan() returns early on cancellation
-	done := make(chan struct{})
-	defer close(done)
-
 	var fullContent strings.Builder
 	var fullReasoning strings.Builder
 
@@ -390,18 +345,6 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 	toolCallAcc := make(map[int]*ToolCall)
 
 	for scanner.Scan() {
-		// Check if context was cancelled (by Stop())
-		select {
-		case <-ctx.Done():
-			err = ctx.Err()
-			response.Role = "assistant"
-			response.Content = fullContent.String()
-			response.ReasoningContent = fullReasoning.String()
-			response.ToolCalls = finalizeToolCalls(toolCallAcc)
-			return response, err
-		default:
-		}
-
 		line := scanner.Text()
 
 		// Skip empty lines (keep-alive mechanism)
