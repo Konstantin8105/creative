@@ -81,9 +81,12 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 
 	_, err := chat.SendStream(message, true)
 	if err != nil {
-		errData, _ := json.Marshal(map[string]string{"message": err.Error()})
-		sseEvent(w, flusher, "error", string(errData))
-		sseEvent(w, flusher, "done", "{}")
+		// Show error as a regular assistant message so the user always sees it
+		errHTML := renderMarkdown(fmt.Sprintf("⚠️ **Error:**\n\n```\n%s\n```", err.Error()))
+		doneData, _ := json.Marshal(map[string]string{
+			"content_html": errHTML,
+		})
+		sseEvent(w, flusher, "done", string(doneData))
 		return
 	}
 

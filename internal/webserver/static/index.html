@@ -490,10 +490,6 @@ body {
         scrollToBottom();
         break;
 
-      case 'error':
-        renderedContentDiv.innerHTML = '<p style="color: var(--accent-red);">⚠️ Error: ' + escapeHtml(data.message || '') + '</p>';
-        break;
-
       case 'done':
         removeTypingIndicator(msgDiv);
         renderedContentDiv.innerHTML = data.content_html || '';
