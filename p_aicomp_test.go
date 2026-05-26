@@ -67,7 +67,9 @@ func TestAiComp(t *testing.T) {
 			if !ok {
 				t.Fatal("expected http.Flusher")
 			}
-			for i := 0; i < 100; i++ {
+			// Only send a few chunks — Stop() is a no-op so the stream
+			// will complete normally. 100 chunks × 10ms = 1s is unnecessary.
+			for i := 0; i < 5; i++ {
 				fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"chunk-%d \"}}]}\n\n", i)
 				flusher.Flush()
 				time.Sleep(10 * time.Millisecond)
@@ -98,23 +100,24 @@ func TestAiComp(t *testing.T) {
 			ch <- result{resp, err}
 		}()
 
-		// Let it stream a few chunks, then stop
+		// Let it stream a couple chunks, then stop (no-op)
 		time.Sleep(50 * time.Millisecond)
 		err := ai.Stop()
 		if err != nil {
 			t.Fatal(err)
 		}
 
+		// RouterAI.Stop() is a documented no-op (cancellation is per-request
+		// via context.WithTimeout), so the stream should complete normally.
 		r := <-ch
-		if r.err == nil {
-			t.Error("expected error after Stop(), got nil")
-		} else {
-			t.Logf("Got expected error after Stop(): %v", r.err)
+		if r.err != nil {
+			t.Fatal(r.err)
 		}
+		t.Logf("Full response: %q", r.resp.Content)
 		if r.resp.Content == "" {
-			t.Error("expected partial content after Stop()")
+			t.Error("expected non-empty content")
 		} else {
-			t.Logf("Partial content after Stop(): %q", r.resp.Content)
+			t.Logf("Content after Stop(): %q", r.resp.Content)
 		}
 	})
 }
