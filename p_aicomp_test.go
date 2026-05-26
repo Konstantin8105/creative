@@ -137,6 +137,9 @@ func TestAiComp(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLMStudio(t *testing.T) {
+	if testing.Short() {
+		return
+	}
 	// Configuration from environment or defaults
 	endpoint := os.Getenv("CREATIVE_ENDPOINT")
 	if endpoint == "" {

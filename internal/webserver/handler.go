@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -26,7 +27,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(indexHTML)
+	if _, err := w.Write(indexHTML); err != nil {
+		log.Printf("Error writing index HTML: %v", err)
+	}
 }
 
 func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
