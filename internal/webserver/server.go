@@ -1,4 +1,4 @@
-﻿package webserver
+package webserver
 
 import (
 	"log"
@@ -28,9 +28,9 @@ func Start(prv *creative.RouterAI, tools []creative.Tool, port string) {
 	})
 
 	addr := ":" + port
-	log.Printf("  📚 Web server started at http://localhost%s", addr)
-	log.Printf("  👥 Share your local IP with others in your network")
-	log.Printf("  ⏱  Sessions expire after 1 hour of inactivity")
+	log.Printf("  ?? Web server started at http://localhost%s", addr)
+	log.Printf("  ?? Share your local IP with others in your network")
+	log.Printf("  ?  Sessions expire after 1 hour of inactivity")
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("Server error: %v", err)

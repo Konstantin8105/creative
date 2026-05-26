@@ -1,4 +1,4 @@
-﻿package webserver
+package webserver
 
 import (
 	_ "embed"
@@ -77,7 +77,7 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 	// Catch any panic (e.g. nil pointer in callbacks) and show error to user
 	defer func() {
 		if r := recover(); r != nil {
-			errHTML := renderMarkdown(fmt.Sprintf("⚠️ **Internal Error:**\n\n```\n%v\n```", r))
+			errHTML := renderMarkdown(fmt.Sprintf("?? **Internal Error:**\n\n```\n%v\n```", r))
 			sendDone(errHTML, "")
 		}
 	}()
@@ -85,11 +85,11 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 	chat.SetCallback(&creative.ChatEventCallback{
 		OnStreamChunk: func(chunk string) {
 			fullContent.WriteString(chunk)
-			// Don't send content chunks during streaming — buffer for final done event
+			// Don't send content chunks during streaming � buffer for final done event
 		},
 		OnReasoning: func(text string) {
 			fullReasoning.WriteString(text)
-			// Don't send reasoning chunks during streaming — buffer for final done event
+			// Don't send reasoning chunks during streaming � buffer for final done event
 		},
 		OnToolCall: func(name, args string) {
 			data, _ := json.Marshal(map[string]string{"name": name, "args": args})
@@ -120,14 +120,14 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		partialContent := strings.TrimSpace(fullContent.String())
 		partialReasoning := strings.TrimSpace(fullReasoning.String())
 		if partialContent != "" || partialReasoning != "" {
-			errNote := fmt.Sprintf("\n\n---\n⚠️ **Connection lost:** `%s`", err.Error())
+			errNote := fmt.Sprintf("\n\n---\n?? **Connection lost:** `%s`", err.Error())
 			fullContent.WriteString(errNote)
 			sendDone(renderMarkdown(fullContent.String()), renderMarkdown(partialReasoning))
 			return
 		}
 
-		// No partial content — show error as a regular assistant message
-		errHTML := renderMarkdown(fmt.Sprintf("⚠️ **Error:**\n\n```\n%s\n```", err.Error()))
+		// No partial content � show error as a regular assistant message
+		errHTML := renderMarkdown(fmt.Sprintf("?? **Error:**\n\n```\n%s\n```", err.Error()))
 		sendDone(errHTML, "")
 		return
 	}

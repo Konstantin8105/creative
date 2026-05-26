@@ -54,6 +54,19 @@ func TestAiComp(t *testing.T) {
 			t.Errorf("chunks: got %v, want [single response]", chunks)
 		}
 	})
+	t.Run("NewRouterAI", func(t *testing.T) {
+		prv := creative.Provider{Model: "test-model"}
+		ai := creative.NewRouterAI(prv)
+		if ai == nil {
+			t.Fatal("NewRouterAI returned nil")
+		}
+	})
+	t.Run("GetContextSize", func(t *testing.T) {
+		ai := creative.NewRouterAI(creative.Provider{ContextSize: 8192})
+		if sz := ai.GetContextSize(); sz != 8192 {
+			t.Errorf("GetContextSize = %d, want 8192", sz)
+		}
+	})
 	t.Run("RouterAI_type", func(t *testing.T) {
 		var _ creative.AIrunner = (*creative.RouterAI)(nil)
 	})
@@ -120,6 +133,172 @@ func TestAiComp(t *testing.T) {
 			t.Logf("Content after Stop(): %q", r.resp.Content)
 		}
 	})
+}
+
+// ---------------------------------------------------------------------------
+// RouterAI SendStream error tests with httptest
+// ---------------------------------------------------------------------------
+
+func TestRouterAI_SendStream_EmptyEndpoint(t *testing.T) {
+	ai := creative.NewRouterAI(creative.Provider{Endpoint: "", Model: "test"})
+	_, err := ai.SendStream(nil, true, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for empty endpoint")
+	}
+	if !strings.Contains(err.Error(), "empty endpoint") {
+		t.Errorf("expected 'empty endpoint' in error, got: %v", err)
+	}
+}
+
+func TestRouterAI_SendStream_EmptyModel(t *testing.T) {
+	ai := creative.NewRouterAI(creative.Provider{Endpoint: "http://localhost:9999", Model: ""})
+	_, err := ai.SendStream(nil, true, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for empty model")
+	}
+	if !strings.Contains(err.Error(), "empty model") {
+		t.Errorf("expected 'empty model' in error, got: %v", err)
+	}
+}
+
+func TestRouterAI_SendStream_HTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("server error occurred"))
+	}))
+	defer srv.Close()
+
+	ai := creative.NewRouterAI(creative.Provider{
+		Endpoint:       srv.URL + "/v1",
+		Model:          "test-model",
+		RequestTimeout: 5 * time.Second,
+	})
+	_, err := ai.SendStream(nil, true, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for HTTP 500")
+	}
+	if !strings.Contains(err.Error(), "status 500") {
+		t.Errorf("expected 'status 500' in error, got: %v", err)
+	}
+}
+
+func TestRouterAI_SendStream_APIErrorInStream(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("expected http.Flusher")
+		}
+		fmt.Fprintf(w, "data: {\"error\":{\"message\":\"rate limit exceeded\",\"type\":\"rate_limit_error\"}}\n\n")
+		flusher.Flush()
+	}))
+	defer srv.Close()
+
+	ai := creative.NewRouterAI(creative.Provider{
+		Endpoint:       srv.URL + "/v1",
+		Model:          "test-model",
+		RequestTimeout: 5 * time.Second,
+	})
+	_, err := ai.SendStream(nil, true, nil, nil)
+	if err == nil {
+		t.Fatal("expected API error")
+	}
+	if !strings.Contains(err.Error(), "rate limit exceeded") {
+		t.Errorf("expected 'rate limit exceeded' in error, got: %v", err)
+	}
+}
+
+func TestRouterAI_SendStream_DoneMarker(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("expected http.Flusher")
+		}
+		fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\n")
+		flusher.Flush()
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer srv.Close()
+
+	ai := creative.NewRouterAI(creative.Provider{
+		Endpoint:       srv.URL + "/v1",
+		Model:          "test-model",
+		RequestTimeout: 5 * time.Second,
+	})
+	resp, err := ai.SendStream(nil, true, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Content != "hello" {
+		t.Errorf("Content=%q, want %q", resp.Content, "hello")
+	}
+}
+
+func TestRouterAI_SendStream_GenerateMode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("expected http.Flusher")
+		}
+		fmt.Fprintf(w, "data: {\"choices\":[{\"text\":\"hello world\"}]}\n\n")
+		flusher.Flush()
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer srv.Close()
+
+	ai := creative.NewRouterAI(creative.Provider{
+		Endpoint:       srv.URL + "/v1",
+		Model:          "test-model",
+		RequestTimeout: 5 * time.Second,
+	})
+	resp, err := ai.SendStream(nil, false, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Content != "hello world" {
+		t.Errorf("Content=%q, want %q", resp.Content, "hello world")
+	}
+}
+
+func TestRouterAI_SendStream_ToolCallAccumulation(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("expected http.Flusher")
+		}
+		// Tool call in parts across multiple chunks
+		fmt.Fprintf(w, `data: {"choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_current_time","arguments":""}}]}}]}`+"\n\n")
+		flusher.Flush()
+		fmt.Fprintf(w, `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]}}]}`+"\n\n")
+		flusher.Flush()
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer srv.Close()
+
+	ai := creative.NewRouterAI(creative.Provider{
+		Endpoint:       srv.URL + "/v1",
+		Model:          "test-model",
+		RequestTimeout: 5 * time.Second,
+	})
+	resp, err := ai.SendStream(
+		[]creative.ChatMessage{{Role: "user", Content: "time please"}},
+		true, nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(resp.ToolCalls))
+	}
+	if resp.ToolCalls[0].Function.Name != "get_current_time" {
+		t.Errorf("tool name=%q, want %q", resp.ToolCalls[0].Function.Name, "get_current_time")
+	}
 }
 
 // ---------------------------------------------------------------------------
