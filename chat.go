@@ -3,6 +3,7 @@ package creative
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 )
@@ -89,6 +90,15 @@ func (ch *Chat) Send(input string, isChat bool) (responce string, err error) {
 		s := strings.Join(ch.system, "\n\n")
 		ch.msgs = append(ch.msgs, ChatMessage{Role: "system", Content: s})
 	}
+	// Save checkpoint before adding user message; rollback on error to prevent
+	// invalid message sequences (e.g. user without assistant) that cause
+	// DeepSeek API errors on subsequent requests.
+	checkpoint := len(ch.msgs)
+	defer func() {
+		if err != nil {
+			ch.msgs = ch.msgs[:checkpoint]
+		}
+	}()
 	ch.msgs = append(ch.msgs,
 		ChatMessage{Role: "user", Content: input},
 	)
@@ -141,6 +151,18 @@ func isTransientError(err error) bool {
 	return false
 }
 
+// validateMessages checks that the message sequence is valid before sending to the AI API.
+// It logs a warning if consecutive user messages are found (indicates a bug or edge case).
+// This is a safety net to prevent sending invalid message sequences that cause API errors.
+func validateMessages(msgs []ChatMessage) {
+	for i := 1; i < len(msgs); i++ {
+		if msgs[i].Role == "user" && msgs[i-1].Role == "user" {
+			log.Printf("WARN: consecutive user messages at indices %d and %d — message history may be corrupted",
+				i-1, i)
+		}
+	}
+}
+
 // retrySendStream calls prv.SendStream with retry logic for transient errors.
 // It never modifies ch.msgs on error.
 func (ch *Chat) retrySendStream(isChat bool, streamCB func(chunkType, chunk string)) (assistantMsg ChatMessage, err error) {
@@ -158,6 +180,9 @@ func (ch *Chat) retrySendStream(isChat bool, streamCB func(chunkType, chunk stri
 			// Sleep with backoff: 1s, 2s, 3s...
 			time.Sleep(time.Duration(attempt-1) * time.Second)
 		}
+
+		// Validate message sequence before sending; warn on duplicate user messages.
+		validateMessages(ch.msgs)
 
 		assistantMsg, err = ch.prv.SendStream(ch.msgs, isChat, streamCB, ch.Tools)
 		if err == nil {
@@ -189,6 +214,14 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 		s := strings.Join(ch.system, "\n\n")
 		ch.msgs = append(ch.msgs, ChatMessage{Role: "system", Content: s})
 	}
+	// Save checkpoint before adding user message; rollback on error to prevent
+	// invalid message sequences that cause DeepSeek API errors on subsequent requests.
+	checkpoint := len(ch.msgs)
+	defer func() {
+		if err != nil {
+			ch.msgs = ch.msgs[:checkpoint]
+		}
+	}()
 	ch.msgs = append(ch.msgs,
 		ChatMessage{Role: "user", Content: input},
 	)
@@ -212,7 +245,6 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 
 	assistantMsg, err := ch.retrySendStream(isChat, streamCB)
 	if err != nil {
-		// On error: do NOT modify ch.msgs — retrySendStream guarantees this.
 		return "", err
 	}
 	if assistantMsg.Role == "" {
@@ -248,6 +280,10 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 		if len(last.ToolCalls) == 0 {
 			return last.Content, nil
 		}
+
+		// Save checkpoint before adding tool result messages; rollback on error
+		// to prevent orphaned tool results without a corresponding assistant response.
+		checkpoint := len(ch.msgs)
 
 		// Execute all tool calls in batch
 		for _, tc := range last.ToolCalls {
@@ -301,6 +337,7 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 
 		response, err := ch.retrySendStream(isChat, streamCB)
 		if err != nil {
+			ch.msgs = ch.msgs[:checkpoint]
 			return "", err
 		}
 		if response.Role == "" {
