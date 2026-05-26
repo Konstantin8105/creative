@@ -286,8 +286,8 @@ body {
   font-size: 14px;
   resize: none;
   outline: none;
-  min-height: 48px;
-  max-height: 150px;
+  min-height: 60px;
+  max-height: 400px;
   transition: border-color 0.2s;
 }
 #message-input:focus {
@@ -363,7 +363,7 @@ body {
 
   <div class="input-area">
     <div class="input-row">
-      <textarea id="message-input" rows="1" placeholder="Type your question..." autofocus></textarea>
+      <textarea id="message-input" rows="3" placeholder="Type your question..." autofocus></textarea>
       <button id="send-btn" title="Send">➤</button>
     </div>
   </div>
@@ -385,15 +385,7 @@ body {
   // Auto-resize textarea
   input.addEventListener('input', () => {
     input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 150) + 'px';
-  });
-
-  // Send on Enter (Shift+Enter for newline)
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    input.style.height = Math.min(input.scrollHeight, 400) + 'px';
   });
 
   sendBtn.addEventListener('click', sendMessage);
