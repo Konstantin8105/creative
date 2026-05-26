@@ -179,7 +179,13 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 		for _, tc := range last.ToolCalls {
 			tool, found := findTool(tc.Function.Name, ch.Tools)
 			if !found {
-				return "", fmt.Errorf("tool not found: %s", tc.Function.Name)
+				// Send error as tool result — AI sees the mistake and can retry
+				ch.msgs = append(ch.msgs, ChatMessage{
+					Role:       "tool",
+					ToolCallID: tc.ID,
+					Content:    fmt.Sprintf("Error: tool '%s' not found. Available tools: %s", tc.Function.Name, ch.listToolNames()),
+				})
+				continue
 			}
 			params := ToolParamsToString(tool, tc.Function.Arguments)
 
@@ -254,4 +260,13 @@ func findTool(name string, tools []Tool) (Tool, bool) {
 		}
 	}
 	return Tool{}, false
+}
+
+// listToolNames returns a comma-separated list of available tool names.
+func (ch *Chat) listToolNames() string {
+	names := make([]string, len(ch.Tools))
+	for i, t := range ch.Tools {
+		names[i] = t.Name
+	}
+	return strings.Join(names, ", ")
 }
