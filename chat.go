@@ -345,8 +345,15 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 		}
 		response.Content = strings.TrimSpace(response.Content)
 		if response.Content == "" && len(response.ToolCalls) == 0 {
-			// No content and no tool calls — return previous response
-			return ch.msgs[len(ch.msgs)-2].Content, nil
+			// No content and no tool calls — return previous assistant response.
+			// Search backwards to find the last assistant with non-empty content,
+			// skipping tool result messages that may have been appended.
+			for i := len(ch.msgs) - 1; i >= 0; i-- {
+				if ch.msgs[i].Role == "assistant" && ch.msgs[i].Content != "" {
+					return ch.msgs[i].Content, nil
+				}
+			}
+			return "", nil
 		}
 		ch.msgs = append(ch.msgs, response)
 	}
