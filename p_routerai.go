@@ -130,26 +130,6 @@ func (o *RouterAI) requestBody(messages []ChatMessage, isChat bool, stream bool,
 	return body
 }
 
-// openAIResponse is the response structure from the OpenAI Chat Completions API.
-type openAIResponse struct {
-	ID      string `json:"id"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index   int `json:"index"`
-		Message struct {
-			Role             string     `json:"role"`
-			Content          string     `json:"content"`
-			ReasoningContent string     `json:"reasoning_content"`
-			ToolCalls        []ToolCall `json:"tool_calls"`
-		} `json:"message"`
-		Text string `json:"text"`
-	} `json:"choices"`
-	Usage struct {
-		PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
-		PromptCacheMissTokens int `json:"prompt_cache_miss_tokens"`
-	} `json:"usage"`
-}
-
 // streamChunk is the SSE stream chunk structure for OpenAI Chat Completions.
 type streamChunk struct {
 	Choices []struct {
@@ -173,22 +153,6 @@ type streamToolCall struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
 	} `json:"function"`
-}
-
-// defaults sets default values for unset fields.
-func (o *RouterAI) defaults() {
-	if o.Endpoint == "" {
-		o.Endpoint = "http://localhost:11434/v1/"
-	}
-	if o.Model == "" {
-		o.Model = "gpt-3.5-turbo"
-	}
-	if o.RequestTimeout == 0 {
-		o.RequestTimeout = 4 * time.Hour
-	}
-	if o.ContextSize <= 0 {
-		o.ContextSize = 4096
-	}
 }
 
 // SendStream sends messages with streaming support.
