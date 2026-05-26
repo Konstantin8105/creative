@@ -390,6 +390,25 @@ func splitLastMode(s string) (mode, pattern string) {
 	return "", s
 }
 
+// regexMetacharacters contains characters that indicate a regex pattern.
+// When a pattern contains any of these (beyond the keyword OR pipe),
+// it is auto-detected as regex.
+var regexMetacharacters = []string{
+	".", "*", "+", "[", "]", "(", ")", "^", "$", "\\", "?", "{", "}",
+}
+
+// looksLikeRegex checks if the pattern contains regex metacharacters
+// (beyond simple `|` which is used for keyword OR mode).
+// Returns true if the pattern looks like a regular expression.
+func looksLikeRegex(pattern string) bool {
+	for _, mc := range regexMetacharacters {
+		if strings.Contains(pattern, mc) {
+			return true
+		}
+	}
+	return false
+}
+
 // runSearch выполняет поиск по ключевым словам или regex.
 func runSearch(fullPath, filename, pattern, mode string) string {
 	if pattern == "" {
@@ -398,6 +417,14 @@ func runSearch(fullPath, filename, pattern, mode string) string {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	switch mode {
 	case "", "keyword":
+		// Auto-detect: if pattern contains regex metacharacters and compiles as regex,
+		// automatically switch to regex mode for better search results.
+		if looksLikeRegex(pattern) {
+			if _, err := regexp.Compile(pattern); err == nil {
+				return searchByRegex(fullPath, filename, pattern)
+			}
+			// Doesn't compile as regex — fall through to keyword mode
+		}
 		return searchByKeyword(fullPath, filename, pattern)
 	case "regex":
 		return searchByRegex(fullPath, filename, pattern)

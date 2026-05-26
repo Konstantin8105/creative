@@ -293,6 +293,80 @@ func TestBookTools(t *testing.T) {
 		}
 	})
 
+	// ─── Auto-detect regex tests ───
+	// When a pattern contains regex metacharacters (like . * + [ ] ( ) etc.),
+	// the tool should auto-detect it as regex and use regex search instead of keyword.
+
+	t.Run("search_in_book_auto_regex_dot_star", func(t *testing.T) {
+		// Pattern "нач.*путеш" should auto-detect and find "Так началось моё путешествие"
+		result := executeTool(t, "search_in_book", "book_sample.txt нач.*путеш")
+		if !strings.Contains(result, "regex") {
+			t.Errorf("auto-detect should show regex mode, got:\n%s", result)
+		}
+		if !strings.Contains(result, "началось моё путешествие") {
+			t.Errorf("auto-detect regex should find 'началось моё путешествие', got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_auto_regex_start_anchor", func(t *testing.T) {
+		// Pattern "^Глава" should auto-detect and find chapter headers
+		result := executeTool(t, "search_in_book", "book_sample.txt ^Глава")
+		if !strings.Contains(result, "regex") {
+			t.Errorf("auto-detect should show regex mode, got:\n%s", result)
+		}
+		if !strings.Contains(result, "Глава") {
+			t.Errorf("auto-detect regex '^Глава' should find chapters, got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_auto_regex_alternation", func(t *testing.T) {
+		// Pattern "Москв[уа]|Пет[е]рбург" should auto-detect and find Moscow or Petersburg
+		result := executeTool(t, "search_in_book", "book_sample.txt Москв[уа]")
+		if !strings.Contains(result, "regex") {
+			t.Errorf("auto-detect should show regex mode, got:\n%s", result)
+		}
+		if !strings.Contains(result, "Москва") {
+			t.Errorf("auto-detect regex should find 'Москва', got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_auto_regex_plus_quantifier", func(t *testing.T) {
+		// Pattern "\\d+" should auto-detect as regex
+		result := executeTool(t, "search_in_book", "book_sample.md \\d+")
+		if !strings.Contains(result, "regex") {
+			t.Errorf("auto-detect should show regex mode, got:\n%s", result)
+		}
+		if !strings.Contains(result, "Строка") {
+			t.Errorf("auto-detect regex '\\d+' should match lines, got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_keyword_not_affected_by_dash", func(t *testing.T) {
+		// Simple keyword with hyphens should NOT be auto-detected as regex.
+		// "Серое небо" (with space) is in the file, but "Серое-небо" (with hyphen) is not.
+		// The search should stay in keyword mode and report no matches — not switch to regex.
+		result := executeTool(t, "search_in_book", "book_sample.txt Серое-небо")
+		// Should NOT contain "regex" — the hyphen is not a regex metacharacter
+		if strings.Contains(result, "regex") {
+			t.Errorf("simple keyword with dash should NOT switch to regex mode, got:\n%s", result)
+		}
+		// Should say "не найдено" because there's no literal "Серое-небо" in the file
+		if !strings.Contains(result, "не найдено") {
+			t.Errorf("should report no matches for 'Серое-небо', got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_explicit_regex_still_works", func(t *testing.T) {
+		// Explicit regex mode should still work as before
+		result := executeTool(t, "search_in_book", "book_sample.md Go regex")
+		if !strings.Contains(result, "regex") {
+			t.Errorf("should show regex mode, got:\n%s", result)
+		}
+		if !strings.Contains(result, "Строка") {
+			t.Errorf("should find something with regex, got:\n%s", result)
+		}
+	})
+
 	// Tests for filenames containing spaces (regression for native tool call bug).
 	// These simulate what happens after ToolParamsToString converts JSON args
 	// like {"filename":"СП 16.13330.2017.txt"} → "СП 16.13330.2017.txt" (quoted).
