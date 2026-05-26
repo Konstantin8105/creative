@@ -181,6 +181,10 @@ func main() {
 				)
 			}
 		},
+		OnRetry: func(attempt int, err error) {
+			fmt.Printf("\n%s  🔄 Retry %d: %v%s\n",
+				colorBold+colorYellow, attempt, err, colorReset)
+		},
 	})
 
 	// Interactive chat loop

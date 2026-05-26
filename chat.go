@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // MaxToolIterations is the maximum number of tool call iterations per send.
@@ -13,6 +14,11 @@ var MaxToolIterations = 8
 // Set to 0 for full (untruncated) output.
 // Default is 200 characters.
 var ToolResultMaxPreview = 200
+
+// MaxSendRetries is the maximum number of retries on transient server errors
+// (INTERNAL_ERROR, HTTP 500/503, connection errors).
+// Default is 2 retries (3 total attempts). Set to 0 to disable retry.
+var MaxSendRetries = 5
 
 // ChatEventCallback receives live updates during Chat.SendStream().
 // All callbacks are optional (nil = no callback).
@@ -25,6 +31,9 @@ type ChatEventCallback struct {
 	OnToolResult func(name string, result string)
 	// OnReasoning is called for reasoning_content chunks (DeepSeek thinking mode).
 	OnReasoning func(text string)
+	// OnRetry is called before each retry attempt (not called on first attempt).
+	// attempt is the retry number (1-based), err is the error that triggered retry.
+	OnRetry func(attempt int, err error)
 }
 
 func NewChat(prv AIrunner) *Chat {
@@ -106,6 +115,70 @@ func (ch *Chat) Send(input string, isChat bool) (responce string, err error) {
 	return
 }
 
+// isTransientError returns true if the error is likely a transient server issue
+// that can be safely retried without modifying the message history.
+func isTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	// HTTP/2 INTERNAL_ERROR from server peer
+	if strings.Contains(msg, "INTERNAL_ERROR") {
+		return true
+	}
+	// HTTP 500 Server Error, 503 Server Overloaded, 429 Rate Limited
+	if strings.Contains(msg, "status 500") || strings.Contains(msg, "status 503") || strings.Contains(msg, "status 429") {
+		return true
+	}
+	// Stream read/connection errors
+	if strings.Contains(msg, "stream read error") || strings.Contains(msg, "stream error") {
+		return true
+	}
+	// Generic connection/timeout errors
+	if strings.Contains(msg, "connection") || strings.Contains(msg, "timeout") || strings.Contains(msg, "EOF") {
+		return true
+	}
+	return false
+}
+
+// retrySendStream calls prv.SendStream with retry logic for transient errors.
+// It never modifies ch.msgs on error.
+func (ch *Chat) retrySendStream(isChat bool, streamCB func(chunkType, chunk string)) (assistantMsg ChatMessage, err error) {
+	maxAttempts := 1 + MaxSendRetries // first attempt + retries
+	if MaxSendRetries < 0 {
+		maxAttempts = 1
+	}
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 {
+			// Fire OnRetry callback before retrying
+			if ch.callback != nil && ch.callback.OnRetry != nil {
+				ch.callback.OnRetry(attempt-1, lastErr)
+			}
+			// Sleep with backoff: 1s, 2s, 3s...
+			time.Sleep(time.Duration(attempt-1) * time.Second)
+		}
+
+		assistantMsg, err = ch.prv.SendStream(ch.msgs, isChat, streamCB, ch.Tools)
+		if err == nil {
+			return assistantMsg, nil // success
+		}
+
+		lastErr = err
+		if !isTransientError(err) {
+			// Permanent error — don't retry
+			return assistantMsg, err
+		}
+		// Transient error — will retry
+	}
+
+	// All retries exhausted
+	if assistantMsg.Content != "" || len(assistantMsg.ToolCalls) > 0 {
+		return assistantMsg, fmt.Errorf("stream error after %d retries: %w", maxAttempts, lastErr)
+	}
+	return assistantMsg, fmt.Errorf("stream error after %d retries: %w", maxAttempts, lastErr)
+}
+
 // SendStream sends a message to the AI with streaming support.
 // The assistant's response text is streamed via the callback set by SetCallback().
 // Processes any tool calls and streams subsequent responses.
@@ -137,15 +210,9 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 		}
 	}
 
-	assistantMsg, err := ch.prv.SendStream(ch.msgs, isChat, streamCB, ch.Tools)
+	assistantMsg, err := ch.retrySendStream(isChat, streamCB)
 	if err != nil {
-		// On error: do NOT modify ch.msgs — corrupted history would break
-		// future requests (alternating user/assistant/tool sequence).
-		// Return the error to the caller so it can be shown to the user.
-		// If there is partial content, include it in the error message.
-		if assistantMsg.Content != "" || len(assistantMsg.ToolCalls) > 0 {
-			return "", fmt.Errorf("stream error after partial response: %w", err)
-		}
+		// On error: do NOT modify ch.msgs — retrySendStream guarantees this.
 		return "", err
 	}
 	if assistantMsg.Role == "" {
@@ -215,7 +282,7 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 			})
 		}
 
-		// Send back to AI with tool results using streaming
+		// Send back to AI with tool results using streaming (with retry)
 		streamCB := func(chunkType, chunk string) {
 			if ch.callback == nil {
 				return
@@ -232,7 +299,7 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 			}
 		}
 
-		response, err := ch.prv.SendStream(ch.msgs, isChat, streamCB, ch.Tools)
+		response, err := ch.retrySendStream(isChat, streamCB)
 		if err != nil {
 			return "", err
 		}

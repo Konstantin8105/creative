@@ -100,6 +100,13 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 			data, _ := json.Marshal(map[string]string{"name": name, "result": preview})
 			sseEvent(w, flusher, "tool_result", string(data))
 		},
+		OnRetry: func(attempt int, err error) {
+			data, _ := json.Marshal(map[string]interface{}{
+				"attempt": attempt,
+				"error":   err.Error(),
+			})
+			sseEvent(w, flusher, "retry", string(data))
+		},
 	})
 
 	_, err := chat.SendStream(message, true)
