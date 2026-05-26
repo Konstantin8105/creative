@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/Konstantin8105/creative"
 	"github.com/russross/blackfriday/v2"
@@ -56,6 +57,28 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 	var fullContent strings.Builder
 	var fullReasoning strings.Builder
 
+	// sendDoneOnce guarantees the 'done' SSE event is sent exactly once,
+	// even on panic or error. This way the frontend always removes the
+	// typing indicator and shows *something* to the user.
+	var doneOnce sync.Once
+	sendDone := func(contentHTML, reasoningHTML string) {
+		doneOnce.Do(func() {
+			doneData, _ := json.Marshal(map[string]string{
+				"content_html":   contentHTML,
+				"reasoning_html": reasoningHTML,
+			})
+			sseEvent(w, flusher, "done", string(doneData))
+		})
+	}
+
+	// Catch any panic (e.g. nil pointer in callbacks) and show error to user
+	defer func() {
+		if r := recover(); r != nil {
+			errHTML := renderMarkdown(fmt.Sprintf("⚠️ **Internal Error:**\n\n```\n%v\n```", r))
+			sendDone(errHTML, "")
+		}
+	}()
+
 	chat.SetCallback(&creative.ChatEventCallback{
 		OnStreamChunk: func(chunk string) {
 			fullContent.WriteString(chunk)
@@ -89,33 +112,19 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		if partialContent != "" || partialReasoning != "" {
 			errNote := fmt.Sprintf("\n\n---\n⚠️ **Connection lost:** `%s`", err.Error())
 			fullContent.WriteString(errNote)
-			contentHTML := renderMarkdown(fullContent.String())
-			reasoningHTML := renderMarkdown(partialReasoning)
-			doneData, _ := json.Marshal(map[string]string{
-				"content_html":   contentHTML,
-				"reasoning_html": reasoningHTML,
-			})
-			sseEvent(w, flusher, "done", string(doneData))
+			sendDone(renderMarkdown(fullContent.String()), renderMarkdown(partialReasoning))
 			return
 		}
 
 		// No partial content — show error as a regular assistant message
 		errHTML := renderMarkdown(fmt.Sprintf("⚠️ **Error:**\n\n```\n%s\n```", err.Error()))
-		doneData, _ := json.Marshal(map[string]string{
-			"content_html": errHTML,
-		})
-		sseEvent(w, flusher, "done", string(doneData))
+		sendDone(errHTML, "")
 		return
 	}
 
 	contentHTML := renderMarkdown(fullContent.String())
 	reasoningHTML := renderMarkdown(fullReasoning.String())
-
-	doneData, _ := json.Marshal(map[string]string{
-		"content_html":   contentHTML,
-		"reasoning_html": reasoningHTML,
-	})
-	sseEvent(w, flusher, "done", string(doneData))
+	sendDone(contentHTML, reasoningHTML)
 }
 
 func renderMarkdown(text string) string {
