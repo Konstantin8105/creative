@@ -4,7 +4,6 @@
     "content": "Hello"
   },
   {
-    "role": "assistant",
-    "content": ""
+    "role": "assistant"
   }
 ]

@@ -366,6 +366,22 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 			break
 		}
 
+		// Check for API error in the stream data before parsing as a chunk.
+		// DeepSeek may return error objects in stream format (e.g. rate limit, server errors).
+		var apiErr struct {
+			Error *struct {
+				Message string `json:"message"`
+				Type    string `json:"type"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(data), &apiErr); err == nil && apiErr.Error != nil {
+			response.Role = "assistant"
+			response.Content = fullContent.String()
+			response.ReasoningContent = fullReasoning.String()
+			response.ToolCalls = finalizeToolCalls(toolCallAcc)
+			return response, fmt.Errorf("API error in stream: %s (type: %s)", apiErr.Error.Message, apiErr.Error.Type)
+		}
+
 		// Parse the chunk
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {

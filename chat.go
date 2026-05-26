@@ -139,19 +139,12 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 
 	assistantMsg, err := ch.prv.SendStream(ch.msgs, isChat, streamCB, ch.Tools)
 	if err != nil {
-		// If we got partial content or tool calls despite the error,
-		// preserve them — partial response is better than nothing.
-		// This happens when DeepSeek API closes the stream mid-response.
+		// On error: do NOT modify ch.msgs — corrupted history would break
+		// future requests (alternating user/assistant/tool sequence).
+		// Return the error to the caller so it can be shown to the user.
+		// If there is partial content, include it in the error message.
 		if assistantMsg.Content != "" || len(assistantMsg.ToolCalls) > 0 {
-			if assistantMsg.Role == "" {
-				assistantMsg.Role = "assistant"
-			}
-			if assistantMsg.Content != "" {
-				assistantMsg.Content += "\n\n---\n⚠️ *Connection lost, response may be incomplete.*"
-			}
-			ch.msgs = append(ch.msgs, assistantMsg)
-			response = strings.TrimSpace(assistantMsg.Content)
-			return response, nil
+			return "", fmt.Errorf("stream error after partial response: %w", err)
 		}
 		return "", err
 	}
