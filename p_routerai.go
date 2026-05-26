@@ -90,7 +90,7 @@ func (o *RouterAI) requestBody(messages []ChatMessage, isChat bool, stream bool,
 		Model:       o.Model,
 		Stream:      stream,
 		Temperature: 0.7,
-		MaxTokens:   o.ContextSize,
+		MaxTokens:   8192,
 		TopP:        0.9,
 	}
 

@@ -31,3 +31,4 @@ plans/
 # Editor/IDE
 # .idea/
 # .vscode/
+cmd/chat/*.json

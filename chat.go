@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 )
@@ -197,7 +198,12 @@ func (ch *Chat) retrySendStream(isChat bool, streamCB func(chunkType, chunk stri
 		// Transient error — will retry
 	}
 
-	// All retries exhausted
+	// All retries exhausted — dump messages to JSON for debugging
+	if false {
+		data, _ := json.MarshalIndent(ch.msgs, "", "  ")
+		os.WriteFile("chat_error_dump.json", data, 0644)
+		log.Printf("ERROR: chat messages dumped to chat_error_dump.json (%d bytes)", len(data))
+	}
 	if assistantMsg.Content != "" || len(assistantMsg.ToolCalls) > 0 {
 		return assistantMsg, fmt.Errorf("stream error after %d retries: %w", maxAttempts, lastErr)
 	}
