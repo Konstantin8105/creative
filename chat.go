@@ -139,6 +139,20 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 
 	assistantMsg, err := ch.prv.SendStream(ch.msgs, isChat, streamCB, ch.Tools)
 	if err != nil {
+		// If we got partial content or tool calls despite the error,
+		// preserve them — partial response is better than nothing.
+		// This happens when DeepSeek API closes the stream mid-response.
+		if assistantMsg.Content != "" || len(assistantMsg.ToolCalls) > 0 {
+			if assistantMsg.Role == "" {
+				assistantMsg.Role = "assistant"
+			}
+			if assistantMsg.Content != "" {
+				assistantMsg.Content += "\n\n---\n⚠️ *Connection lost, response may be incomplete.*"
+			}
+			ch.msgs = append(ch.msgs, assistantMsg)
+			response = strings.TrimSpace(assistantMsg.Content)
+			return response, nil
+		}
 		return "", err
 	}
 	if assistantMsg.Role == "" {

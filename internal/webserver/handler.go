@@ -81,7 +81,25 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 
 	_, err := chat.SendStream(message, true)
 	if err != nil {
-		// Show error as a regular assistant message so the user always sees it
+		// Defensive fallback: if chat.SendStream returned an error but the
+		// callback already buffered partial content (e.g. from stream errors),
+		// show the partial content together with the error message.
+		partialContent := strings.TrimSpace(fullContent.String())
+		partialReasoning := strings.TrimSpace(fullReasoning.String())
+		if partialContent != "" || partialReasoning != "" {
+			errNote := fmt.Sprintf("\n\n---\n⚠️ **Connection lost:** `%s`", err.Error())
+			fullContent.WriteString(errNote)
+			contentHTML := renderMarkdown(fullContent.String())
+			reasoningHTML := renderMarkdown(partialReasoning)
+			doneData, _ := json.Marshal(map[string]string{
+				"content_html":   contentHTML,
+				"reasoning_html": reasoningHTML,
+			})
+			sseEvent(w, flusher, "done", string(doneData))
+			return
+		}
+
+		// No partial content — show error as a regular assistant message
 		errHTML := renderMarkdown(fmt.Sprintf("⚠️ **Error:**\n\n```\n%s\n```", err.Error()))
 		doneData, _ := json.Marshal(map[string]string{
 			"content_html": errHTML,
