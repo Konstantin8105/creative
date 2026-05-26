@@ -149,7 +149,7 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 
 	// Process tool calls — if we got native tool_calls
 	if len(ch.Tools) > 0 && len(assistantMsg.ToolCalls) > 0 {
-		response, err = ch.processToolCallsStream(isChat)
+		response, err = ch.processToolCalls(isChat)
 		if err != nil {
 			return "", err
 		}
@@ -159,92 +159,11 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 	return response, nil
 }
 
-// processToolCalls processes both native tool_calls and legacy {{tool:...}} markers.
-// Each iteration processes one batch of tool calls (native or legacy),
-// then sends results back to AI.
-// Continues until no more tool calls are found or MaxToolIterations is reached.
+// processToolCalls processes tool calls with streaming support.
+// Each iteration executes all tool calls in batch, streams the AI's response
+// via SendStream, and continues until no more tool calls are found
+// or MaxToolIterations is reached.
 func (ch *Chat) processToolCalls(isChat bool) (string, error) {
-	for iteration := 0; iteration < MaxToolIterations; iteration++ {
-		last := ch.msgs[len(ch.msgs)-1]
-		if last.Role != "assistant" {
-			return last.Content, nil
-		}
-
-		// No tool_calls — we're done
-		if len(last.ToolCalls) == 0 {
-			return last.Content, nil
-		}
-
-		// Execute all tool calls in batch
-		for _, tc := range last.ToolCalls {
-			tool, found := findTool(tc.Function.Name, ch.Tools)
-			if !found {
-				return "", fmt.Errorf("tool not found: %s", tc.Function.Name)
-			}
-			// Convert JSON arguments to space-separated for Execute functions
-			params := ToolParamsToString(tool, tc.Function.Arguments)
-
-			// Fire OnToolCall callback
-			if ch.callback != nil && ch.callback.OnToolCall != nil {
-				ch.callback.OnToolCall(tool.Name, tc.Function.Arguments)
-			}
-
-			result := tool.Execute(params)
-
-			// Fire OnToolResult callback
-			if ch.callback != nil && ch.callback.OnToolResult != nil {
-				ch.callback.OnToolResult(tool.Name, result)
-			}
-
-			ch.msgs = append(ch.msgs, ChatMessage{
-				Role:       "tool",
-				ToolCallID: tc.ID,
-				Content:    result,
-			})
-		}
-
-		// Send back to AI with tool results (using streaming)
-		streamCB := func(chunkType, chunk string) {
-			if ch.callback == nil {
-				return
-			}
-			switch chunkType {
-			case "content":
-				if ch.callback.OnStreamChunk != nil {
-					ch.callback.OnStreamChunk(chunk)
-				}
-			case "reasoning":
-				if ch.callback.OnReasoning != nil {
-					ch.callback.OnReasoning(chunk)
-				}
-			}
-		}
-
-		response, err := ch.prv.SendStream(ch.msgs, isChat, streamCB, ch.Tools)
-		if err != nil {
-			return "", err
-		}
-		if response.Role == "" {
-			response.Role = "assistant"
-		}
-		response.Content = strings.TrimSpace(response.Content)
-		if response.Content == "" && len(response.ToolCalls) == 0 {
-			// No content and no tool calls — return previous response
-			return ch.msgs[len(ch.msgs)-2].Content, nil
-		}
-		ch.msgs = append(ch.msgs, response)
-
-		// Continue loop if AI made more tool calls
-	}
-
-	// Max iterations reached — return last response
-	last := ch.msgs[len(ch.msgs)-1]
-	return last.Content, nil
-}
-
-// processToolCallsStream processes tool calls with streaming support.
-// Each iteration streams the AI's response after tool results via SendStream.
-func (ch *Chat) processToolCallsStream(isChat bool) (string, error) {
 	for iteration := 0; iteration < MaxToolIterations; iteration++ {
 		last := ch.msgs[len(ch.msgs)-1]
 		if last.Role != "assistant" {
@@ -309,11 +228,13 @@ func (ch *Chat) processToolCallsStream(isChat bool) (string, error) {
 		}
 		response.Content = strings.TrimSpace(response.Content)
 		if response.Content == "" && len(response.ToolCalls) == 0 {
+			// No content and no tool calls — return previous response
 			return ch.msgs[len(ch.msgs)-2].Content, nil
 		}
 		ch.msgs = append(ch.msgs, response)
 	}
 
+	// Max iterations reached — return last response
 	last := ch.msgs[len(ch.msgs)-1]
 	return last.Content, nil
 }
