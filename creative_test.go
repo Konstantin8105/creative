@@ -33,16 +33,6 @@ func (ai TestAi) GetModels() (string, error) {
 	return ai.models, ai.error_models
 }
 
-func (ai *TestAi) Send(chs []creative.ChatMessage, isChat bool, tools []creative.Tool) (creative.ChatMessage, error) {
-	if 0 < len(ai.rs) {
-		defer func() {
-			ai.counter++
-		}()
-		return creative.ChatMessage{Role: "assistant", Content: ai.rs[ai.counter]}, nil
-	}
-	return creative.ChatMessage{Role: "assistant", Content: ai.resp}, ai.err
-}
-
 func (ai *TestAi) Stop() error {
 	return nil
 }

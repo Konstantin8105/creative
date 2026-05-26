@@ -11,11 +11,6 @@ type AIrunner interface {
 
 	GetModels() (string, error)
 
-	// Send sends messages and returns the full assistant ChatMessage,
-	// which includes Content, ReasoningContent, and ToolCalls (if any).
-	// tools parameter contains available tool definitions.
-	Send(chs []ChatMessage, isChat bool, tools []Tool) (msg ChatMessage, err error)
-
 	// SendStream sends messages with streaming support.
 	// callback is called for each chunk of generated text.
 	// chunkType is "content" for regular text or "reasoning" for thinking mode output.

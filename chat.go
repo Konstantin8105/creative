@@ -93,7 +93,7 @@ func (ch *Chat) Send(input string, isChat bool) (responce string, err error) {
 		ChatMessage{Role: "user", Content: input},
 	)
 
-	assistantMsg, err := ch.prv.Send(ch.msgs, isChat, ch.Tools)
+	assistantMsg, err := ch.prv.SendStream(ch.msgs, isChat, nil, ch.Tools)
 	if err != nil {
 		return
 	}

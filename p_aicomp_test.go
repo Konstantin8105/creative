@@ -25,26 +25,6 @@ func TestAiComp(t *testing.T) {
 		}
 		t.Logf("%s", out)
 	})
-	t.Run("chat", func(t *testing.T) {
-		for _, isChat := range []bool{false, true} {
-			t.Run(func() string {
-				if isChat {
-					return "chat"
-				}
-				return "generate"
-			}(), func(t *testing.T) {
-				ai := TestAi{resp: "42"}
-				out, err := ai.Send([]creative.ChatMessage{
-					{Role: "system", Content: "You the best math teacher"},
-					{Role: "assistant", Content: "1+1 = ?"},
-				}, isChat, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				t.Logf("%s", out.Content)
-			})
-		}
-	})
 	t.Run("SendStream", func(t *testing.T) {
 		ai := TestAi{rs: []string{"Hello", " ", "World", "!"}}
 		out, err := ai.SendStream(nil, true, func(chunkType, chunk string) {
@@ -194,34 +174,6 @@ func TestLMStudio(t *testing.T) {
 	// Set the model and run tests
 	prv.Model = modelName
 	ai = creative.NewRouterAI(prv)
-
-	t.Run("Send_chat", func(t *testing.T) {
-		resp, err := ai.Send([]creative.ChatMessage{
-			{Role: "system", Content: "Отвечай только одним числом, без пояснений"},
-			{Role: "user", Content: "Сколько будет 2+2?"},
-		}, true, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("Chat response: %s", resp.Content)
-		if resp.Content == "" {
-			t.Error("empty response")
-		}
-	})
-
-	t.Run("Send_generate", func(t *testing.T) {
-		resp, err := ai.Send([]creative.ChatMessage{
-			{Role: "system", Content: "Отвечай только одним числом"},
-			{Role: "user", Content: "Сколько будет 3*4?"},
-		}, false, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("Generate response: %s", resp.Content)
-		if resp.Content == "" {
-			t.Error("empty response")
-		}
-	})
 
 	t.Run("SendStream_chat", func(t *testing.T) {
 		var chunks []string
