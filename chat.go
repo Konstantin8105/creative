@@ -7,7 +7,7 @@ import (
 )
 
 // MaxToolIterations is the maximum number of tool call iterations per send.
-var MaxToolIterations = 20
+var MaxToolIterations = 8
 
 // ToolResultMaxPreview is the maximum length of a tool result preview in callbacks.
 // Set to 0 for full (untruncated) output.

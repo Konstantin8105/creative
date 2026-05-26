@@ -209,7 +209,7 @@ body {
 /* ─── Tool Call / Result ─── */
 .tool-notice {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 6px 12px;
   margin: 4px 0;
@@ -224,10 +224,13 @@ body {
 .tool-notice .name { color: var(--accent-yellow); font-weight: 600; }
 .tool-notice .result-preview {
   color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 300px;
+  white-space: normal;
+  word-break: break-word;
+  overflow: visible;
+}
+/* Allow the text wrapper span to shrink in the flex layout */
+.tool-notice > span:last-child {
+  min-width: 0;
 }
 
 /* ─── Reasoning (collapsible) ─── */
