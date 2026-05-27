@@ -201,9 +201,11 @@ body {
 /* ─── Raw streaming (before markdown render) ─── */
 .bubble .streaming-text {
   white-space: pre-wrap;
+  word-wrap: break-word;
   font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--text-primary);
+  color: var(--accent-green);
+  line-height: 1.5;
 }
 
 /* ─── Tool Call / Result ─── */
@@ -399,10 +401,10 @@ body {
     input.value = '';
     input.style.height = 'auto';
 
-    // Create assistant message placeholder with typing indicator
+    // Create assistant message placeholder with typing indicator + streaming area
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message assistant';
-    msgDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="rendered-content"></div><div class="typing-indicator active"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
+    msgDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="streaming-text" style="display:none"></div><div class="rendered-content"></div><div class="typing-indicator active"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
     chatContainer.appendChild(msgDiv);
     isStreaming = true;
     setInputState(false);
@@ -468,6 +470,32 @@ body {
     if (!data) return;
 
     switch (eventType) {
+      case 'content_chunk':
+        // Show streaming text live during generation
+        let st = bubble.querySelector('.streaming-text');
+        if (st) {
+          st.style.display = 'block';
+          st.textContent += data.content || '';
+          // Hide rendered content during streaming — will be shown on done
+          renderedContentDiv.style.display = 'none';
+        }
+        scrollToBottom();
+        break;
+
+      case 'reasoning_chunk':
+        // Show reasoning text live during generation
+        let rt = bubble.querySelector('.reasoning-streaming');
+        if (!rt) {
+          const rd = document.createElement('div');
+          rd.className = 'reasoning-streaming';
+          rd.style.cssText = 'display:block; padding:8px; margin:4px 0; background:var(--bg-tertiary); border-radius:8px; border-left:3px solid var(--accent-purple); font-size:13px; color:var(--text-muted); line-height:1.5; white-space:pre-wrap;';
+          bubble.appendChild(rd);
+          rt = rd;
+        }
+        rt.textContent += data.content || '';
+        scrollToBottom();
+        break;
+
       case 'tool_call':
         // Show tool call notification
         const name = data.name || '';
@@ -492,8 +520,18 @@ body {
 
       case 'done':
         removeTypingIndicator(msgDiv);
+
+        // Hide streaming text area
+        const stDiv = bubble.querySelector('.streaming-text');
+        if (stDiv) { stDiv.style.display = 'none'; stDiv.textContent = ''; }
+
+        // Remove streaming reasoning area
+        const rsDiv = bubble.querySelector('.reasoning-streaming');
+        if (rsDiv) rsDiv.remove();
+
+        // Show and update rendered content with final HTML
+        renderedContentDiv.style.display = 'block';
         renderedContentDiv.innerHTML = data.content_html || '';
-        // Move renderedContent to the end (after tool notices)
         bubble.appendChild(renderedContentDiv);
 
         // Add reasoning section if present

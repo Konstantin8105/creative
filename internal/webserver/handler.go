@@ -85,11 +85,13 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 	chat.SetCallback(&creative.ChatEventCallback{
 		OnStreamChunk: func(chunk string) {
 			fullContent.WriteString(chunk)
-			// Don't send content chunks during streaming � buffer for final done event
+			data, _ := json.Marshal(map[string]string{"content": chunk})
+			sseEvent(w, flusher, "content_chunk", string(data))
 		},
 		OnReasoning: func(text string) {
 			fullReasoning.WriteString(text)
-			// Don't send reasoning chunks during streaming � buffer for final done event
+			data, _ := json.Marshal(map[string]string{"content": text})
+			sseEvent(w, flusher, "reasoning_chunk", string(data))
 		},
 		OnToolCall: func(name, args string) {
 			data, _ := json.Marshal(map[string]string{"name": name, "args": args})
