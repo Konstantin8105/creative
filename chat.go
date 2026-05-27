@@ -73,6 +73,26 @@ func (ch *Chat) SetCallback(cb *ChatEventCallback) {
 	ch.callback = cb
 }
 
+// streamCallback returns a closure that routes streaming chunks to
+// the ChatEventCallback. Used by SendStream and processToolCalls.
+func (ch *Chat) streamCallback() func(chunkType, chunk string) {
+	return func(chunkType, chunk string) {
+		if ch.callback == nil {
+			return
+		}
+		switch chunkType {
+		case "content":
+			if ch.callback.OnStreamChunk != nil {
+				ch.callback.OnStreamChunk(chunk)
+			}
+		case "reasoning":
+			if ch.callback.OnReasoning != nil {
+				ch.callback.OnReasoning(chunk)
+			}
+		}
+	}
+}
+
 func (ch Chat) String() string {
 	data, err := json.MarshalIndent(ch.msgs, "", "  ")
 	if err != nil {
@@ -235,24 +255,7 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 		ChatMessage{Role: "user", Content: input},
 	)
 
-	// Build the streaming callback that routes to ChatEventCallback
-	streamCB := func(chunkType, chunk string) {
-		if ch.callback == nil {
-			return
-		}
-		switch chunkType {
-		case "content":
-			if ch.callback.OnStreamChunk != nil {
-				ch.callback.OnStreamChunk(chunk)
-			}
-		case "reasoning":
-			if ch.callback.OnReasoning != nil {
-				ch.callback.OnReasoning(chunk)
-			}
-		}
-	}
-
-	assistantMsg, err := ch.retrySendStream(isChat, streamCB)
+	assistantMsg, err := ch.retrySendStream(isChat, ch.streamCallback())
 	if err != nil {
 		return "", err
 	}
@@ -347,24 +350,7 @@ func (ch *Chat) processToolCalls(isChat bool) (_ string, err error) {
 			})
 		}
 
-		// Send back to AI with tool results using streaming (with retry)
-		streamCB := func(chunkType, chunk string) {
-			if ch.callback == nil {
-				return
-			}
-			switch chunkType {
-			case "content":
-				if ch.callback.OnStreamChunk != nil {
-					ch.callback.OnStreamChunk(chunk)
-				}
-			case "reasoning":
-				if ch.callback.OnReasoning != nil {
-					ch.callback.OnReasoning(chunk)
-				}
-			}
-		}
-
-		response, err := ch.retrySendStream(isChat, streamCB)
+		response, err := ch.retrySendStream(isChat, ch.streamCallback())
 		if err != nil {
 			ch.msgs = ch.msgs[:checkpoint]
 			return "", err
@@ -395,28 +381,11 @@ func (ch *Chat) processToolCalls(isChat bool) (_ string, err error) {
 	// This prevents empty/truncated responses when the AI exhausts its
 	// iteration budget without producing final text.
 	if len(last.ToolCalls) > 0 {
-		// Build streaming callback for the final forced response
-		streamCB := func(chunkType, chunk string) {
-			if ch.callback == nil {
-				return
-			}
-			switch chunkType {
-			case "content":
-				if ch.callback.OnStreamChunk != nil {
-					ch.callback.OnStreamChunk(chunk)
-				}
-			case "reasoning":
-				if ch.callback.OnReasoning != nil {
-					ch.callback.OnReasoning(chunk)
-				}
-			}
-		}
-
 		// Temporarily remove tools so the AI cannot call them
 		savedTools := ch.Tools
 		ch.Tools = nil
 
-		response, err := ch.retrySendStream(isChat, streamCB)
+		response, err := ch.retrySendStream(isChat, ch.streamCallback())
 
 		// Restore tools immediately so subsequent messages can use them
 		ch.Tools = savedTools
