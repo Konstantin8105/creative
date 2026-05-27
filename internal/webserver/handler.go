@@ -112,6 +112,13 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 			})
 			sseEvent(w, flusher, "retry", string(data))
 		},
+		OnInfo: func(eventType, message string) {
+			data, _ := json.Marshal(map[string]string{
+				"type":    eventType,
+				"message": message,
+			})
+			sseEvent(w, flusher, "info", string(data))
+		},
 	})
 
 	_, err := chat.SendStream(message, true)

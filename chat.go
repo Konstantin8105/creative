@@ -36,6 +36,9 @@ type ChatEventCallback struct {
 	// OnRetry is called before each retry attempt (not called on first attempt).
 	// attempt is the retry number (1-based), err is the error that triggered retry.
 	OnRetry func(attempt int, err error)
+	// OnInfo is a universal informational message block.
+	// eventType is a discriminator string (e.g. "iteration", "message_size").
+	OnInfo func(eventType string, message string)
 }
 
 func NewChat(prv AIrunner) *Chat {
@@ -275,8 +278,28 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 // Each iteration executes all tool calls in batch, streams the AI's response
 // via SendStream, and continues until no more tool calls are found
 // or MaxToolIterations is reached.
-func (ch *Chat) processToolCalls(isChat bool) (string, error) {
+func (ch *Chat) processToolCalls(isChat bool) (_ string, err error) {
+	defer func() {
+		// Fire message size info
+		if ch.callback != nil && ch.callback.OnInfo != nil {
+			if err != nil {
+				ch.callback.OnInfo("message_size",
+					fmt.Sprintf("Error: %v", err))
+			}
+			if data, err := json.Marshal(ch.msgs); err == nil {
+				ch.callback.OnInfo("message_size",
+					fmt.Sprintf("Messages: %s (%d msgs)",
+						formatFileSize(int64(len(data))), len(ch.msgs)))
+			}
+		}
+	}()
 	for iteration := 0; iteration < MaxToolIterations; iteration++ {
+		// Fire iteration info
+		if ch.callback != nil && ch.callback.OnInfo != nil {
+			ch.callback.OnInfo("iteration",
+				fmt.Sprintf("Iteration %d/%d", iteration+1, MaxToolIterations))
+		}
+
 		last := ch.msgs[len(ch.msgs)-1]
 		if last.Role != "assistant" {
 			return last.Content, nil
@@ -366,6 +389,7 @@ func (ch *Chat) processToolCalls(isChat bool) (string, error) {
 
 	// Max iterations reached — return last response
 	last := ch.msgs[len(ch.msgs)-1]
+
 	return last.Content, nil
 }
 
