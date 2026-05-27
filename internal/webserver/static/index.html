@@ -235,6 +235,12 @@ body {
   min-width: 0;
 }
 
+/* ─── Tools Container ─── */
+.tools-container {
+  display: flex;
+  flex-direction: column;
+}
+
 /* ─── Info Notice (universal message block) ─── */
 .info-notice {
   display: flex;
@@ -252,6 +258,12 @@ body {
 .info-notice .icon { font-size: 14px; }
 .info-notice .info-type { color: var(--accent-cyan); font-weight: 600; }
 .info-notice .info-message { color: var(--text-secondary); word-break: break-word; }
+
+/* ─── Tools Container ─── */
+.tools-container {
+  display: flex;
+  flex-direction: column;
+}
 
 /* ─── Reasoning (collapsible) ─── */
 .reasoning-toggle {
@@ -422,7 +434,7 @@ body {
     // Create assistant message placeholder with typing indicator + streaming area
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message assistant';
-    msgDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="streaming-text" style="display:none"></div><div class="rendered-content"></div><div class="typing-indicator active"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
+    msgDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="tools-container"></div><div class="streaming-text" style="display:none"></div><div class="rendered-content"></div><div class="typing-indicator active"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
     chatContainer.appendChild(msgDiv);
     isStreaming = true;
     setInputState(false);
@@ -521,7 +533,7 @@ body {
         const notice = document.createElement('div');
         notice.className = 'tool-notice';
         notice.innerHTML = '<span class="icon">🔧</span><span>Tool: <span class="name">' + escapeHtml(name) + '</span>(<span class="result-preview">' + escapeHtml(truncate(args, 80)) + '</span>)</span>';
-        bubble.appendChild(notice);
+        bubble.querySelector('.tools-container').appendChild(notice);
         scrollToBottom();
         break;
 
@@ -532,7 +544,7 @@ body {
         const rnotice = document.createElement('div');
         rnotice.className = 'tool-notice';
         rnotice.innerHTML = '<span class="icon">✅</span><span><span class="name">' + escapeHtml(rname) + '</span> → <span class="result-preview">' + escapeHtml(truncate(result, 120)) + '</span></span>';
-        bubble.appendChild(rnotice);
+        bubble.querySelector('.tools-container').appendChild(rnotice);
         scrollToBottom();
         break;
 
@@ -545,7 +557,7 @@ body {
         infoNotice.innerHTML = '<span class="icon">ℹ️</span><span><span class="info-type">' +
           escapeHtml(infoType) + '</span>: <span class="info-message">' +
           escapeHtml(infoMessage) + '</span></span>';
-        bubble.appendChild(infoNotice);
+        bubble.querySelector('.tools-container').appendChild(infoNotice);
         scrollToBottom();
         break;
 
@@ -563,7 +575,6 @@ body {
         // Show and update rendered content with final HTML
         renderedContentDiv.style.display = 'block';
         renderedContentDiv.innerHTML = data.content_html || '';
-        bubble.appendChild(renderedContentDiv);
 
         // Add reasoning section if present
         if (data.reasoning_html) {
