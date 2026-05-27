@@ -10,7 +10,7 @@ import (
 )
 
 // MaxToolIterations is the maximum number of tool call iterations per send.
-var MaxToolIterations = 8
+var MaxToolIterations = 20
 
 // ToolResultMaxPreview is the maximum length of a tool result preview in callbacks.
 // Set to 0 for full (untruncated) output.
@@ -389,6 +389,48 @@ func (ch *Chat) processToolCalls(isChat bool) (_ string, err error) {
 
 	// Max iterations reached — return last response
 	last := ch.msgs[len(ch.msgs)-1]
+
+	// If the AI still wants to call tools, force a final text response
+	// by temporarily removing tools so the AI cannot make further calls.
+	// This prevents empty/truncated responses when the AI exhausts its
+	// iteration budget without producing final text.
+	if len(last.ToolCalls) > 0 {
+		// Build streaming callback for the final forced response
+		streamCB := func(chunkType, chunk string) {
+			if ch.callback == nil {
+				return
+			}
+			switch chunkType {
+			case "content":
+				if ch.callback.OnStreamChunk != nil {
+					ch.callback.OnStreamChunk(chunk)
+				}
+			case "reasoning":
+				if ch.callback.OnReasoning != nil {
+					ch.callback.OnReasoning(chunk)
+				}
+			}
+		}
+
+		// Temporarily remove tools so the AI cannot call them
+		savedTools := ch.Tools
+		ch.Tools = nil
+
+		response, err := ch.retrySendStream(isChat, streamCB)
+
+		// Restore tools immediately so subsequent messages can use them
+		ch.Tools = savedTools
+
+		if err != nil {
+			return "", err
+		}
+		if response.Role == "" {
+			response.Role = "assistant"
+		}
+		response.Content = strings.TrimSpace(response.Content)
+		ch.msgs = append(ch.msgs, response)
+		return response.Content, nil
+	}
 
 	return last.Content, nil
 }
