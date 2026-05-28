@@ -50,9 +50,8 @@ func (m Mode) String() string {
 		return "🔬 Научные исследования"
 	case ModeSoftware:
 		return "💻 Программное обеспечение"
-	default:
-		return "📚 Инженерные нормативы"
 	}
+	panic(fmt.Errorf("Undefined mode: `%s`", string(m)))
 }
 
 // GetPrompt returns the embedded system prompt content for this mode.
@@ -68,9 +67,8 @@ func (m Mode) GetPrompt() string {
 		return sciencePrompt
 	case ModeSoftware:
 		return softwarePrompt
-	default:
-		return engineerPrompt
 	}
+	panic(fmt.Errorf("Undefined mode: `%s`", string(m)))
 }
 
 // BooksFolder — путь к папке с книгами.
