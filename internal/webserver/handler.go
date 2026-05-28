@@ -135,7 +135,7 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 			return
 		}
 
-		// No partial content � show error as a regular assistant message
+		// No partial content — show error as a regular assistant message
 		errHTML := renderMarkdown(fmt.Sprintf("?? **Error:**\n\n```\n%s\n```", err.Error()))
 		sendDone(errHTML, "")
 		return
@@ -144,6 +144,14 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 	contentHTML := renderMarkdown(fullContent.String())
 	reasoningHTML := renderMarkdown(fullReasoning.String())
 	sendDone(contentHTML, reasoningHTML)
+}
+
+func handleConfig(w http.ResponseWriter, r *http.Request, mode creative.Mode) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"mode":  string(mode),
+		"label": mode.String(),
+	})
 }
 
 func renderMarkdown(text string) string {

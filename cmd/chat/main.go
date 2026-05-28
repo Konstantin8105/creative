@@ -55,8 +55,9 @@ func main() {
 		reasoningEffort = flag.String("reasoning-effort", "high", "Thinking mode effort level (high or max)")
 		userID          = flag.String("user-id", "", "User ID for rate limit isolation")
 
-		// Mode selection: book type
-		psyMode = flag.Bool("psy", false, "Psychology book analysis mode (uses psychology system prompt)")
+		// Mode selection
+		modeStr = flag.String("mode", string(creative.ModeEngineer),
+			"Analysis mode: engineer (default), psy, law, science")
 	)
 
 	flag.Usage = func() {
@@ -105,11 +106,8 @@ func main() {
 	ch := creative.NewChat(prvAI)
 
 	// Add system prompt based on mode
-	if *psyMode {
-		ch.AddSystem(creative.PsySystemPrompt())
-	} else {
-		ch.AddSystem(creative.BookSystemPrompt())
-	}
+	m := creative.Mode(*modeStr)
+	ch.AddSystem(m.GetPrompt())
 
 	// Combine tools: default + book tools
 	tools := append(creative.DefaultTools(), creative.BookTools()...)
@@ -126,7 +124,7 @@ func main() {
 	// Web mode: start HTTP server instead of console chat
 	if *webMode {
 		log.Printf("Starting web server on :%s", *port)
-		webserver.Start(prvAI, tools, *port)
+		webserver.Start(prvAI, tools, *port, m)
 		return
 	}
 
@@ -196,6 +194,7 @@ func main() {
 	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold+colorBlue, colorReset)
 	fmt.Printf("  %sBooks:%s %s%s%s\n", colorBold, colorReset, colorGray, *booksDir, colorReset)
 	fmt.Printf("  %sModel:%s %s%s%s\n", colorBold, colorReset, colorGray, *model, colorReset)
+	fmt.Printf("  %sMode:%s %s%s%s\n", colorBold, colorReset, colorGray, m.String(), colorReset)
 	if *thinkingMode {
 		fmt.Printf("  %sThinking:%s %senabled (effort: %s)%s\n", colorBold, colorReset, colorGray, *reasoningEffort, colorReset)
 	}

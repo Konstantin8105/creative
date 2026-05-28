@@ -59,6 +59,9 @@ body {
   color: var(--text-muted);
   margin-left: auto;
 }
+#mode-label {
+  color: var(--accent-cyan);
+}
 
 /* ─── Chat Container ─── */
 #chat-container {
@@ -383,8 +386,8 @@ body {
 </head>
 <body>
   <div class="header">
-    <h1>📚 IZYseek</h1>
-    <span class="subtitle">AI Engineering Assistant</span>
+    <h1>IZYseek</h1>
+    <span class="subtitle" id="mode-label">Loading...</span>
   </div>
 
   <div id="chat-container">
@@ -630,6 +633,16 @@ body {
     if (!str) return '';
     return str.length > maxLen ? str.slice(0, maxLen) + '...' : str;
   }
+
+  // Fetch mode config and display active role in header
+  fetch('/api/config')
+    .then(r => r.json())
+    .then(config => {
+      document.getElementById('mode-label').textContent = config.label || 'AI Assistant';
+    })
+    .catch(() => {
+      document.getElementById('mode-label').textContent = 'AI Assistant';
+    });
 
   // Initial focus
   input.focus();

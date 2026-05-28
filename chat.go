@@ -1,6 +1,7 @@
 package creative
 
 import (
+	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -133,7 +134,11 @@ func (ch *Chat) Send(input string, isChat bool) (responce string, err error) {
 	)
 
 	if LoggingEnabled {
-		log.Printf("[chat] %s", hex.EncodeToString([]byte(input)))
+		// Вычисляем MD5, получаем [16]byte
+		hashBytes := md5.Sum([]byte(input))
+		// Преобразуем в hex-строку (длина 32 символа)
+		md5String := hex.EncodeToString(hashBytes[:])
+		log.Printf("[chat] %s", md5String)
 	}
 
 	assistantMsg, err := ch.prv.SendStream(ch.msgs, isChat, nil, ch.Tools)
@@ -265,7 +270,11 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 	)
 
 	if LoggingEnabled {
-		log.Printf("[chat] %s", hex.EncodeToString([]byte(input)))
+		// Вычисляем MD5, получаем [16]byte
+		hashBytes := md5.Sum([]byte(input))
+		// Преобразуем в hex-строку (длина 32 символа)
+		md5String := hex.EncodeToString(hashBytes[:])
+		log.Printf("[chat] %s", md5String)
 	}
 
 	assistantMsg, err := ch.retrySendStream(isChat, ch.streamCallback())

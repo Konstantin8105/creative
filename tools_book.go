@@ -11,20 +11,58 @@ import (
 	"strings"
 )
 
-//go:embed book_system_prompt.txt
-var bookSystemPromptFile []byte
+//go:embed system_prompt_engineer.txt
+var engineerPrompt string
 
-//go:embed psy_system_prompt.txt
-var psySystemPromptFile []byte
+//go:embed system_prompt_psy.txt
+var psyPrompt string
 
-// BookSystemPrompt возвращает встроенный системный промпт для работы с книгами.
-func BookSystemPrompt() string {
-	return string(bookSystemPromptFile)
+//go:embed system_prompt_law.txt
+var lawPrompt string
+
+//go:embed system_prompt_science.txt
+var sciencePrompt string
+
+// Mode represents an analysis mode that selects system prompt and display label.
+type Mode string
+
+const (
+	ModeEngineer Mode = "engineer" // Инженерные нормативы (СП, ГОСТ, СНиП)
+	ModePsy      Mode = "psy"      // Психологическая литература
+	ModeLaw      Mode = "law"      // Правовые документы (законы, кодексы)
+	ModeScience  Mode = "science"  // Научные и инженерные исследования
+)
+
+// String returns a human-readable label for the mode (used in UI headers).
+func (m Mode) String() string {
+	switch m {
+	case ModeEngineer:
+		return "📚 Инженерные нормативы"
+	case ModePsy:
+		return "🧠 Психология"
+	case ModeLaw:
+		return "⚖️  Правовые документы"
+	case ModeScience:
+		return "🔬 Научные исследования"
+	default:
+		return "📚 Инженерные нормативы"
+	}
 }
 
-// PsySystemPrompt возвращает встроенный системный промпт для работы с книгами по психологии.
-func PsySystemPrompt() string {
-	return string(psySystemPromptFile)
+// GetPrompt returns the embedded system prompt content for this mode.
+func (m Mode) GetPrompt() string {
+	switch m {
+	case ModeEngineer:
+		return engineerPrompt
+	case ModePsy:
+		return psyPrompt
+	case ModeLaw:
+		return lawPrompt
+	case ModeScience:
+		return sciencePrompt
+	default:
+		return engineerPrompt
+	}
 }
 
 // BooksFolder — путь к папке с книгами.
