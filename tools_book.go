@@ -23,6 +23,9 @@ var lawPrompt string
 //go:embed system_prompt_science.txt
 var sciencePrompt string
 
+//go:embed system_prompt_software.txt
+var softwarePrompt string
+
 // Mode represents an analysis mode that selects system prompt and display label.
 type Mode string
 
@@ -31,6 +34,7 @@ const (
 	ModePsy      Mode = "psy"      // Психологическая литература
 	ModeLaw      Mode = "law"      // Правовые документы (законы, кодексы)
 	ModeScience  Mode = "science"  // Научные и инженерные исследования
+	ModeSoftware Mode = "software" // Справка по программному обеспечению
 )
 
 // String returns a human-readable label for the mode (used in UI headers).
@@ -44,6 +48,8 @@ func (m Mode) String() string {
 		return "⚖️  Правовые документы"
 	case ModeScience:
 		return "🔬 Научные исследования"
+	case ModeSoftware:
+		return "💻 Программное обеспечение"
 	default:
 		return "📚 Инженерные нормативы"
 	}
@@ -60,6 +66,8 @@ func (m Mode) GetPrompt() string {
 		return lawPrompt
 	case ModeScience:
 		return sciencePrompt
+	case ModeSoftware:
+		return softwarePrompt
 	default:
 		return engineerPrompt
 	}

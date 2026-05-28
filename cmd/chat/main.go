@@ -57,7 +57,7 @@ func main() {
 
 		// Mode selection
 		modeStr = flag.String("mode", string(creative.ModeEngineer),
-			"Analysis mode: engineer (default), psy, law, science")
+			"Analysis mode: engineer (default), psy, law, science, software")
 	)
 
 	flag.Usage = func() {
