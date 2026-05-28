@@ -1,6 +1,7 @@
 package creative
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +12,10 @@ import (
 
 // MaxToolIterations is the maximum number of tool call iterations per send.
 var MaxToolIterations = 20
+
+// LoggingEnabled controls whether chat requests are logged via log.Printf.
+// Set to false to disable all chat logging.
+var LoggingEnabled = false
 
 // ToolResultMaxPreview is the maximum length of a tool result preview in callbacks.
 // Set to 0 for full (untruncated) output.
@@ -126,6 +131,10 @@ func (ch *Chat) Send(input string, isChat bool) (responce string, err error) {
 	ch.msgs = append(ch.msgs,
 		ChatMessage{Role: "user", Content: input},
 	)
+
+	if LoggingEnabled {
+		log.Printf("[chat] %s", hex.EncodeToString([]byte(input)))
+	}
 
 	assistantMsg, err := ch.prv.SendStream(ch.msgs, isChat, nil, ch.Tools)
 	if err != nil {
@@ -254,6 +263,10 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 	ch.msgs = append(ch.msgs,
 		ChatMessage{Role: "user", Content: input},
 	)
+
+	if LoggingEnabled {
+		log.Printf("[chat] %s", hex.EncodeToString([]byte(input)))
+	}
 
 	assistantMsg, err := ch.retrySendStream(isChat, ch.streamCallback())
 	if err != nil {

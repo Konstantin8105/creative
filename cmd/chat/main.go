@@ -30,6 +30,8 @@ const (
 func main() {
 	log.SetOutput(os.Stdout)
 
+	creative.LoggingEnabled = true
+
 	var (
 		booksDir = flag.String("books", "", "Path to the books directory (required)")
 		help     = flag.Bool("help", false, "Show help")

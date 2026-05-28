@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"testing"
 )
@@ -125,7 +126,7 @@ func TestValidateMessages(t *testing.T) {
 	t.Run("consecutive_users", func(t *testing.T) {
 		var buf bytes.Buffer
 		log.SetOutput(&buf)
-		defer log.SetOutput(nil)
+		defer log.SetOutput(os.Stdout)
 
 		validateMessages([]ChatMessage{
 			{Role: "user"},
