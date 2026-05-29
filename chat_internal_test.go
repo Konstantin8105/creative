@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -1069,9 +1070,82 @@ func TestSetCallback(t *testing.T) {
 // Stop
 // ---------------------------------------------------------------------------
 
-func TestChatStop(t *testing.T) {
-	ch := NewChat(&mockAI{})
-	if err := ch.Stop(); err != nil {
-		t.Errorf("Stop() returned error: %v", err)
+// ---------------------------------------------------------------------------
+// Concurrent SendStream — verify no deadlock or mutual blocking
+// ---------------------------------------------------------------------------
+
+// slowMockAI simulates a slow AI response by delaying before each chunk.
+type slowMockAI struct {
+	chunks   []string
+	delay    time.Duration
+	context  int
+}
+
+func (m *slowMockAI) GetContextSize() int        { return m.context }
+func (m *slowMockAI) GetModels() (string, error) { return "", nil }
+func (m *slowMockAI) Stop() error                { return nil }
+func (m *slowMockAI) SendStream(_ []ChatMessage, _ bool, cb func(string, string), _ []Tool) (ChatMessage, error) {
+	var full strings.Builder
+	for _, c := range m.chunks {
+		time.Sleep(m.delay)
+		full.WriteString(c)
+		if cb != nil {
+			cb("content", c)
+		}
 	}
+	return ChatMessage{Role: "assistant", Content: full.String()}, nil
+}
+
+func TestSendStream_ConcurrentNoDeadlock(t *testing.T) {
+	const numChats = 5
+	const slowDelay = 50 * time.Millisecond
+
+	mocks := make([]*slowMockAI, numChats)
+	chats := make([]*Chat, numChats)
+	for i := 0; i < numChats; i++ {
+		mocks[i] = &slowMockAI{
+			chunks: []string{"chunkA", "chunkB", "chunkC"},
+			delay:  slowDelay,
+		}
+		chats[i] = NewChat(mocks[i])
+	}
+
+	results := make(chan struct {
+		index int
+		resp  string
+		err   error
+	}, numChats)
+
+	start := time.Now()
+	for i := 0; i < numChats; i++ {
+		i := i
+		go func() {
+			resp, err := chats[i].SendStream("concurrent test", true)
+			results <- struct {
+				index int
+				resp  string
+				err   error
+			}{i, resp, err}
+		}()
+	}
+
+	timeout := time.Duration(numChats) * slowDelay * 3 // ample time
+	deadline := time.After(timeout)
+
+	for i := 0; i < numChats; i++ {
+		select {
+		case r := <-results:
+			if r.err != nil {
+				t.Errorf("chat[%d] SendStream error: %v", r.index, r.err)
+			}
+			if r.resp != "chunkAchunkBchunkC" {
+				t.Errorf("chat[%d] got %q, want %q", r.index, r.resp, "chunkAchunkBchunkC")
+			}
+		case <-deadline:
+			t.Fatalf("deadlock detected: only %d/%d chats completed within %v", i, numChats, timeout)
+		}
+	}
+
+	elapsed := time.Since(start)
+	t.Logf("All %d concurrent chats completed in %v (expected ~%v)", numChats, elapsed, slowDelay*3)
 }

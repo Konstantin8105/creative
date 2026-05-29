@@ -7,48 +7,29 @@ import (
 	"github.com/Konstantin8105/creative"
 )
 
-func TestToolsPrompt(t *testing.T) {
-	t.Run("empty", func(t *testing.T) {
-		got := creative.ToolsPrompt(nil)
-		if got != "" {
-			t.Fatalf("expected empty, got %q", got)
-		}
-	})
-	t.Run("with_tools", func(t *testing.T) {
+func TestToolLookupAndExecute(t *testing.T) {
+	t.Run("not_found", func(t *testing.T) {
 		tools := creative.DefaultTools()
-		got := creative.ToolsPrompt(tools)
-		if !strings.Contains(got, "get_current_time") {
-			t.Fatal("prompt should contain tool name")
+		for _, tool := range tools {
+			if tool.Name == "nonexistent_tool" {
+				t.Fatal("unexpected match")
+			}
 		}
 	})
-}
 
-func TestExecuteTool_NotFound(t *testing.T) {
-	_, err := creative.ExecuteTool("nonexistent_tool", "", nil)
-	if err == nil {
-		t.Fatal("expected error for nonexistent tool")
-	}
-	if !strings.Contains(err.Error(), "tool not found") {
-		t.Errorf("expected 'tool not found' in error, got: %v", err)
-	}
-
-	_, err = creative.ExecuteTool("nonexistent_tool", "", creative.DefaultTools())
-	if err == nil {
-		t.Fatal("expected error for nonexistent tool")
-	}
-	if !strings.Contains(err.Error(), "tool not found") {
-		t.Errorf("expected 'tool not found' in error, got: %v", err)
-	}
-}
-
-func TestExecuteTool_Found(t *testing.T) {
-	result, err := creative.ExecuteTool("get_current_time", "", creative.DefaultTools())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == "" {
-		t.Error("expected non-empty result from get_current_time")
-	}
+	t.Run("found_and_execute", func(t *testing.T) {
+		tools := creative.DefaultTools()
+		for _, tool := range tools {
+			if tool.Name == "get_current_time" {
+				result := tool.Execute("")
+				if result == "" {
+					t.Error("expected non-empty result from get_current_time")
+				}
+				return
+			}
+		}
+		t.Fatal("get_current_time tool not found in DefaultTools")
+	})
 }
 
 func TestToolParamsToString(t *testing.T) {

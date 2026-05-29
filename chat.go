@@ -134,9 +134,7 @@ func (ch *Chat) Send(input string, isChat bool) (responce string, err error) {
 	)
 
 	if LoggingEnabled {
-		// Вычисляем MD5, получаем [16]byte
 		hashBytes := md5.Sum([]byte(input))
-		// Преобразуем в hex-строку (длина 32 символа)
 		md5String := hex.EncodeToString(hashBytes[:])
 		log.Printf("[chat] %s", md5String)
 	}
@@ -424,13 +422,6 @@ func (ch *Chat) processToolCalls(isChat bool) (_ string, err error) {
 	}
 
 	return last.Content, nil
-}
-
-// Stop cancels an ongoing AI operation for this chat.
-// RouterAI is shared across all sessions, so Stop is a no-op.
-// Each HTTP request has its own context and timeout.
-func (ch *Chat) Stop() error {
-	return nil
 }
 
 // findTool looks up a tool by name in the tools slice.

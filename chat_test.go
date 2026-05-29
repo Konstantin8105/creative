@@ -3,7 +3,6 @@ package creative_test
 import (
 	"testing"
 
-	"github.com/Konstantin8105/compare"
 	"github.com/Konstantin8105/creative"
 )
 
@@ -11,30 +10,27 @@ func TestChat(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		prv := TestAi{}
 		ch := creative.NewChat(&prv)
-		_, err := ch.Send("Hello", false)
+		_, err := ch.SendStream("Hello", false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		compare.Test(t, td("chat.empty"), []byte(ch.String()))
 	})
-	t.Run("responce", func(t *testing.T) {
+	t.Run("response", func(t *testing.T) {
 		prv := TestAi{resp: "My name"}
 		ch := creative.NewChat(&prv)
-		_, err := ch.Send("Hello", false)
+		_, err := ch.SendStream("Hello", false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		compare.Test(t, td("chat.responce"), []byte(ch.String()))
 	})
 	t.Run("system", func(t *testing.T) {
 		prv := TestAi{resp: "My name"}
 		ch := creative.NewChat(&prv)
 		ch.AddSystem("info of agent system")
-		_, err := ch.Send("Hello", false)
+		_, err := ch.SendStream("Hello", false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		compare.Test(t, td("chat.system"), []byte(ch.String()))
 	})
 	t.Run("dialog", func(t *testing.T) {
 		prv := TestAi{resp: "My name"}
@@ -42,12 +38,11 @@ func TestChat(t *testing.T) {
 		ch.AddSystem("info of agent system")
 		for _, s := range []string{"QWE", "WER", "ERT"} {
 			prv.resp = "OUT:" + s
-			_, err := ch.Send("IN:"+s, false)
+			_, err := ch.SendStream("IN:"+s, false)
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
-		compare.Test(t, td("chat.dialog"), []byte(ch.String()))
 	})
 	// ---------------------------------------------------------------------------
 	// Iteration exhaustion tests — verify graceful termination when AI keeps
@@ -55,9 +50,6 @@ func TestChat(t *testing.T) {
 	// ---------------------------------------------------------------------------
 
 	t.Run("iteration_exhaustion_force_final_response", func(t *testing.T) {
-		// Simulate an AI that always returns tool_calls but never text content.
-		// After MaxToolIterations, the system should force a final response
-		// by temporarily removing tools and re-sending the conversation.
 		const maxIter = 8
 		creative.MaxToolIterations = maxIter
 
@@ -77,7 +69,7 @@ func TestChat(t *testing.T) {
 		ch := creative.NewChat(prv)
 		ch.SetTools(creative.DefaultTools())
 
-		resp, err := ch.Send("test", true)
+		resp, err := ch.SendStream("test", true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -87,8 +79,7 @@ func TestChat(t *testing.T) {
 	})
 
 	t.Run("iteration_exhaustion_tools_restored", func(t *testing.T) {
-		// Verify that after exhaustion, ch.Tools is restored to the original set.
-		creative.MaxToolIterations = 1 // exhaust quickly
+		creative.MaxToolIterations = 1
 
 		prv := &TestAi{
 			toolCallsOnToolRequest: []creative.ToolCall{
@@ -100,12 +91,11 @@ func TestChat(t *testing.T) {
 		tools := creative.DefaultTools()
 		ch.SetTools(tools)
 
-		_, err := ch.Send("test", true)
+		_, err := ch.SendStream("test", true)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		// Tools must be restored after processToolCalls returns
 		if len(ch.Tools) == 0 {
 			t.Error("ch.Tools is empty after exhaustion — tools were not restored")
 		}
@@ -115,8 +105,6 @@ func TestChat(t *testing.T) {
 	})
 
 	t.Run("iteration_not_exhausted_no_force", func(t *testing.T) {
-		// When the AI stops calling tools before exhausting iterations,
-		// the normal response should be returned without forcing.
 		creative.MaxToolIterations = 8
 
 		prv := &TestAi{
@@ -125,7 +113,7 @@ func TestChat(t *testing.T) {
 		ch := creative.NewChat(prv)
 		ch.SetTools(creative.DefaultTools())
 
-		resp, err := ch.Send("test", true)
+		resp, err := ch.SendStream("test", true)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -48,16 +48,6 @@ func DefaultTools() []Tool {
 	}
 }
 
-// ExecuteTool looks up a tool by name and executes it with the given params.
-func ExecuteTool(name, params string, tools []Tool) (string, error) {
-	for _, t := range tools {
-		if t.Name == name {
-			return t.Execute(params), nil
-		}
-	}
-	return "", fmt.Errorf("tool not found: %s", name)
-}
-
 // ToolParamsToString converts JSON arguments from native tool_calls
 // to a space-separated string for legacy Execute functions.
 // Preserves the Required fields order from Parameters schema.
@@ -130,15 +120,4 @@ func ToolsToOpenAI(tools []Tool) []map[string]interface{} {
 	return result
 }
 
-// ToolsPrompt returns a system prompt describing available tools.
-func ToolsPrompt(tools []Tool) string {
-	if len(tools) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("Available tools:\n")
-	for _, t := range tools {
-		fmt.Fprintf(&b, "- %s: %s\n", t.Name, t.Description)
-	}
-	return b.String()
-}
+

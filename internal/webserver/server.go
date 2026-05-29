@@ -9,30 +9,39 @@ import (
 )
 
 // Start launches the web server and blocks until it exits.
-func Start(prv *creative.RouterAI, tools []creative.Tool, port string, mode creative.Mode) {
-	sm := NewSessionManager(1*time.Hour, func() *creative.Chat {
-		newChat := creative.NewChat(prv)
-		newChat.AddSystem(mode.GetPrompt())
-		newChat.SetTools(tools)
-		newChat.AddSystem(creative.ToolsPrompt(tools))
-		return newChat
-	})
+func Start(cfg *creative.Config, port string) {
+	configDir := cfg.ConfigDir()
+	sm := NewSessionManager(cfg, configDir, 1*time.Hour)
 	defer sm.Stop()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleIndex)
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		handleConfig(w, r, cfg)
+	})
 	mux.HandleFunc("/api/chat", func(w http.ResponseWriter, r *http.Request) {
 		handleChat(w, r, sm)
 	})
-	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
-		handleConfig(w, r, mode)
+	mux.HandleFunc("/api/tabs/create", func(w http.ResponseWriter, r *http.Request) {
+		handleTabsCreate(w, r, sm)
+	})
+	mux.HandleFunc("/api/tabs/list", func(w http.ResponseWriter, r *http.Request) {
+		handleTabsList(w, r, sm)
+	})
+	mux.HandleFunc("/api/tabs/close", func(w http.ResponseWriter, r *http.Request) {
+		handleTabsClose(w, r, sm)
+	})
+	mux.HandleFunc("/api/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		handleHeartbeat(w, r, sm)
+	})
+	mux.HandleFunc("/api/session/close", func(w http.ResponseWriter, r *http.Request) {
+		handleSessionClose(w, r, sm)
 	})
 
 	addr := ":" + port
-	log.Printf("  ?? Web server started at http://localhost%s", addr)
-	log.Printf("  ?? Share your local IP with others in your network")
-	log.Printf("  ?  Mode: %s", mode.String())
-	log.Printf("  ?  Sessions expire after 1 hour of inactivity")
+	log.Printf("  🌐 Web server started at http://localhost%s", addr)
+	log.Printf("  📡 Share your local IP with others in your network")
+	log.Printf("  📋 Modes: %d configured", len(cfg.Modes))
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("Server error: %v", err)

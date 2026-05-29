@@ -168,8 +168,8 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 		err = fmt.Errorf("empty model name")
 		return
 	}
-	if o.RequestTimeout == 0 {
-		o.RequestTimeout = 4 * time.Hour
+	if time.Duration(o.RequestTimeout) == 0 {
+		o.RequestTimeout = DurationString(4 * time.Hour)
 	}
 	if o.ContextSize <= 0 {
 		o.ContextSize = 4096
@@ -184,7 +184,7 @@ func (o *RouterAI) SendStream(messages []ChatMessage, isChat bool, callback func
 		return
 	}
 
-	client := &http.Client{Timeout: o.RequestTimeout}
+	client := &http.Client{Timeout: time.Duration(o.RequestTimeout)}
 	req, err := http.NewRequestWithContext(context.Background(), "POST", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		err = fmt.Errorf("create request error: %w", err)

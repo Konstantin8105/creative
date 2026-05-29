@@ -4,30 +4,35 @@ import (
 	"time"
 )
 
-// Provider represents configuration for AI model provider
-// Valid ranges:
-//   - Model: non-empty string
-//   - Endpoint: valid URL format, non-empty
-//   - Key: optional API key, can be empty for local providers
-//   - ContextSize: positive integer, typically 1000-200000
-//   - RequestTimeout: positive duration, typically 1m-24h
-//   - ThinkingMode: enables/disables DeepSeek thinking mode
-//   - ReasoningEffort: "high" or "max" (thinking mode effort level)
-//   - UserID: user identifier for rate limit isolation ([a-zA-Z0-9\-_]+, max 512)
-type Provider struct {
-	Model string // AI model name, e.g., "llama3.1", "gpt-4"
+// DurationString is a time.Duration that marshals as human-readable strings
+// like "4h", "30m", "60s" in JSON, while remaining a time.Duration internally.
+type DurationString time.Duration
 
-	Endpoint string // API endpoint URL, e.g., "http://localhost:11434/api/"
-	Key      string // API key for external providers (optional)
-
-	ContextSize int // Maximum context window size in tokens
-
-	RequestTimeout time.Duration // Timeout for HTTP requests
-
-	// Thinking mode (DeepSeek-specific)
-	ThinkingMode    bool   // enable/disable thinking mode
-	ReasoningEffort string // "high" or "max" (default: "high")
-
-	// User isolation for rate limiting
-	UserID string // user_id parameter, format: [a-zA-Z0-9\-_]+, max 512 chars
+func (d DurationString) MarshalText() ([]byte, error) {
+	return []byte(time.Duration(d).String()), nil
 }
+
+func (d *DurationString) UnmarshalText(text []byte) error {
+	dur, err := time.ParseDuration(string(text))
+	if err != nil {
+		return err
+	}
+	*d = DurationString(dur)
+	return nil
+}
+
+// ProviderConfig represents configuration for AI model provider
+type ProviderConfig struct {
+	Model           string         `json:"model"`
+	Endpoint        string         `json:"endpoint"`
+	Key             string         `json:"key,omitempty"`
+	ContextSize     int            `json:"context_size"`
+	RequestTimeout  DurationString `json:"timeout"`
+	ThinkingMode    bool           `json:"thinking_mode"`
+	ReasoningEffort string         `json:"reasoning_effort,omitempty"`
+	UserID          string         `json:"user_id,omitempty"`
+}
+
+// Provider is a deprecated alias for ProviderConfig.
+// Deprecated: use ProviderConfig instead.
+type Provider = ProviderConfig

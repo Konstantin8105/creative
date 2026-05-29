@@ -92,10 +92,10 @@ func TestAiComp(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		prv := creative.Provider{
+		prv := creative.ProviderConfig{
 			Endpoint:       srv.URL + "/v1",
 			Model:          "test-model",
-			RequestTimeout: 30 * time.Second,
+			RequestTimeout: creative.DurationString(30 * time.Second),
 			ContextSize:    4096,
 		}
 		ai := creative.NewRouterAI(prv)
@@ -168,10 +168,10 @@ func TestRouterAI_SendStream_HTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ai := creative.NewRouterAI(creative.Provider{
+	ai := creative.NewRouterAI(creative.ProviderConfig{
 		Endpoint:       srv.URL + "/v1",
 		Model:          "test-model",
-		RequestTimeout: 5 * time.Second,
+		RequestTimeout: creative.DurationString(5 * time.Second),
 	})
 	_, err := ai.SendStream(nil, true, nil, nil)
 	if err == nil {
@@ -194,10 +194,10 @@ func TestRouterAI_SendStream_APIErrorInStream(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ai := creative.NewRouterAI(creative.Provider{
+	ai := creative.NewRouterAI(creative.ProviderConfig{
 		Endpoint:       srv.URL + "/v1",
 		Model:          "test-model",
-		RequestTimeout: 5 * time.Second,
+		RequestTimeout: creative.DurationString(5 * time.Second),
 	})
 	_, err := ai.SendStream(nil, true, nil, nil)
 	if err == nil {
@@ -222,10 +222,10 @@ func TestRouterAI_SendStream_DoneMarker(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ai := creative.NewRouterAI(creative.Provider{
+	ai := creative.NewRouterAI(creative.ProviderConfig{
 		Endpoint:       srv.URL + "/v1",
 		Model:          "test-model",
-		RequestTimeout: 5 * time.Second,
+		RequestTimeout: creative.DurationString(5 * time.Second),
 	})
 	resp, err := ai.SendStream(nil, true, nil, nil)
 	if err != nil {
@@ -250,10 +250,10 @@ func TestRouterAI_SendStream_GenerateMode(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ai := creative.NewRouterAI(creative.Provider{
+	ai := creative.NewRouterAI(creative.ProviderConfig{
 		Endpoint:       srv.URL + "/v1",
 		Model:          "test-model",
-		RequestTimeout: 5 * time.Second,
+		RequestTimeout: creative.DurationString(5 * time.Second),
 	})
 	resp, err := ai.SendStream(nil, false, nil, nil)
 	if err != nil {
@@ -281,10 +281,10 @@ func TestRouterAI_SendStream_ToolCallAccumulation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ai := creative.NewRouterAI(creative.Provider{
+	ai := creative.NewRouterAI(creative.ProviderConfig{
 		Endpoint:       srv.URL + "/v1",
 		Model:          "test-model",
-		RequestTimeout: 5 * time.Second,
+		RequestTimeout: creative.DurationString(5 * time.Second),
 	})
 	resp, err := ai.SendStream(
 		[]creative.ChatMessage{{Role: "user", Content: "time please"}},
@@ -336,11 +336,11 @@ func TestLMStudio(t *testing.T) {
 	t.Logf("Endpoint: %s", endpoint)
 	t.Logf("Model:   %s", modelName)
 
-	prv := creative.Provider{
+	prv := creative.ProviderConfig{
 		Endpoint:       endpoint,
 		Model:          "",
 		Key:            apiKey,
-		RequestTimeout: 5 * time.Minute,
+		RequestTimeout: creative.DurationString(5 * time.Minute),
 		ContextSize:    4096,
 	}
 
@@ -412,9 +412,8 @@ func TestLMStudio(t *testing.T) {
 	t.Run("ToolCall", func(t *testing.T) {
 		ch := creative.NewChat(ai)
 		ch.SetTools(creative.DefaultTools())
-		ch.AddSystem(creative.ToolsPrompt(creative.DefaultTools()))
 
-		resp, err := ch.Send("Который сейчас час? Используй инструмент get_current_time.", true)
+		resp, err := ch.SendStream("Который сейчас час? Используй инструмент get_current_time.", true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -422,20 +421,9 @@ func TestLMStudio(t *testing.T) {
 		if resp == "" {
 			t.Error("empty response")
 		}
-
-		str := ch.String()
-		t.Logf("Chat messages: %s", str)
-		if strings.Contains(str, "\"role\":\"tool\"") {
-			t.Log("OK: tool get_current_time was called via native tool_calls")
-		} else {
-			t.Log("Note: tool was not called via native tool_calls (model may not support it)")
-		}
 	})
 
 	t.Run("BookTools", func(t *testing.T) {
-		// Проверяет, что AI может вызывать книжные инструменты через нативные tool_calls.
-
-		// Устанавливаем папку с книгами на testdata
 		oldFolder := creative.BooksFolder
 		creative.BooksFolder = "testdata"
 		defer func() { creative.BooksFolder = oldFolder }()
@@ -443,9 +431,8 @@ func TestLMStudio(t *testing.T) {
 		ch := creative.NewChat(ai)
 		allTools := append(creative.DefaultTools(), creative.BookTools()...)
 		ch.SetTools(allTools)
-		ch.AddSystem(creative.ToolsPrompt(allTools))
 
-		resp, err := ch.Send(`Выполни следующие действия:
+		resp, err := ch.SendStream(`Выполни следующие действия:
 1. Посмотри список книг.
 2. Получи информацию о book_sample.txt.
 3. Найди в book_sample.txt слово "Париж".`, true)
@@ -455,15 +442,6 @@ func TestLMStudio(t *testing.T) {
 		t.Logf("BookTools final response: %s", resp)
 		if resp == "" {
 			t.Error("empty response")
-		}
-
-		str := ch.String()
-		t.Logf("Chat messages: %s", str)
-
-		if strings.Contains(str, "\"role\":\"tool\"") {
-			t.Log("OK: book tools were called via native tool_calls")
-		} else {
-			t.Log("Note: book tools were not called via native tool_calls (model may not support tool_calls)")
 		}
 	})
 

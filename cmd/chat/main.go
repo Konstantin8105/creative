@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
-	"time"
 
 	"github.com/Konstantin8105/creative"
 	"github.com/Konstantin8105/creative/internal/webserver"
 )
 
-// ANSI color codes for terminal output
 const (
 	colorReset  = "\033[0m"
 	colorBold   = "\033[1m"
@@ -29,44 +29,17 @@ const (
 
 func main() {
 	log.SetOutput(os.Stdout)
-
 	creative.LoggingEnabled = true
 
 	var (
-		booksDir = flag.String("books", "", "Path to the books directory (required)")
-		help     = flag.Bool("help", false, "Show help")
-
-		// Mode selection
-		webMode = flag.Bool("web", false, "Run as web server instead of console chat")
-		port    = flag.String("port", "2345", "Web server port (used with -web)")
-
-		// AI provider configuration flags
-		endpoint    = flag.String("endpoint", "http://localhost:11434/v1/", "AI API endpoint (OpenAI-compatible)")
-		model       = flag.String("model", "gpt-oss:20b", "Model name for AI generation")
-		key         = flag.String("key", "", "API key for external provider (optional)")
-		timeout     = flag.Duration("timeout", 4*time.Hour, "Request timeout duration")
-		contextSize = flag.Int("context", 62000, "AI context window size in tokens")
-
-		// Tool result display
-		fullResult = flag.Bool("full-result", false, "Show full tool results without truncation")
-
-		// DeepSeek-specific flags
-		thinkingMode    = flag.Bool("thinking", false, "Enable DeepSeek thinking mode")
-		reasoningEffort = flag.String("reasoning-effort", "high", "Thinking mode effort level (high or max)")
-		userID          = flag.String("user-id", "", "User ID for rate limit isolation")
-
-		// Mode selection
-		modeStr = flag.String("mode", string(creative.ModeEngineer),
-			"Analysis mode: engineer (default), psy, law, science, software")
+		configPath = flag.String("config", "", "Path to configuration JSON file (required)")
+		webMode    = flag.Bool("web", false, "Run as web server instead of console chat")
+		port       = flag.String("port", "2345", "Web server port (used with -web)")
+		help       = flag.Bool("help", false, "Show help")
 	)
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "\nInteractive chat for book analysis.\n")
-		fmt.Fprintf(os.Stderr, "\nOptions:\n")
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExample:\n")
-		fmt.Fprintf(os.Stderr, "  %s -books ./books -model llama3.1\n", os.Args[0])
+		fmt.Fprint(os.Stderr, configHelpText())
 	}
 
 	flag.Parse()
@@ -76,128 +49,72 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *booksDir == "" {
-		log.Fatal("Error: Books directory is required. Use -books flag.")
+	if *configPath == "" {
+		fmt.Println(configHelpText())
+		os.Exit(1)
 	}
 
-	// Validate books directory
-	info, err := os.Stat(*booksDir)
-	if err != nil || !info.IsDir() {
-		log.Fatalf("Error: books directory %q is not accessible or not a directory.", *booksDir)
+	cfg, err := creative.LoadConfig(*configPath)
+	if err != nil {
+		log.Fatalf("Error loading config: %v", err)
 	}
 
-	// Set books folder for tools
-	creative.BooksFolder = *booksDir
-
-	// Initialize AI provider
-	prv := creative.Provider{
-		Endpoint:        *endpoint,
-		Model:           *model,
-		Key:             *key,
-		RequestTimeout:  *timeout,
-		ContextSize:     *contextSize,
-		ThinkingMode:    *thinkingMode,
-		ReasoningEffort: *reasoningEffort,
-		UserID:          *userID,
-	}
-
-	// Create chat with provider
-	prvAI := creative.NewRouterAI(prv)
-	ch := creative.NewChat(prvAI)
-
-	// Add system prompt based on mode
-	m := creative.Mode(*modeStr)
-	ch.AddSystem(m.GetPrompt())
-
-	// Combine tools: default + book tools
-	tools := append(creative.DefaultTools(), creative.BookTools()...)
-	ch.SetTools(tools)
-
-	// Add tools description to system prompt
-	ch.AddSystem(creative.ToolsPrompt(tools))
-
-	// Set tool result preview length (0 = full output)
-	if *fullResult {
-		creative.ToolResultMaxPreview = 0
-	}
-
-	// Web mode: start HTTP server instead of console chat
+	// Web mode: start HTTP server
 	if *webMode {
-		log.Printf("Starting web server on :%s", *port)
-		webserver.Start(prvAI, tools, *port, m)
+		webserver.Start(cfg, *port)
 		return
 	}
 
-	// Set up beautiful streaming callbacks
-	ch.SetCallback(&creative.ChatEventCallback{
-		OnStreamChunk: func(chunk string) {
-			fmt.Print(colorCyan + chunk + colorReset)
-		},
-		OnReasoning: func(text string) {
-			fmt.Print(colorDim + colorGray + text + colorReset)
-		},
-		OnToolCall: func(name, args string) {
-			// Pretty-print the JSON args
-			prettyArgs := args
-			if strings.HasPrefix(args, "{") {
-				prettyArgs = strings.ReplaceAll(args, "\"", "")
-				prettyArgs = strings.ReplaceAll(prettyArgs, "{", "")
-				prettyArgs = strings.ReplaceAll(prettyArgs, "}", "")
-				prettyArgs = strings.ReplaceAll(prettyArgs, ",", ", ")
-			}
-			fmt.Printf("\n%s🔧 %sTool: %s%s(%s%s%s)%s\n",
-				colorReset,
-				colorBold,
-				colorBlue, name,
-				colorYellow, prettyArgs,
-				colorReset,
-				colorReset,
-			)
-		},
-		OnToolResult: func(name, result string) {
-			preview := result
-			maxPreview := creative.ToolResultMaxPreview
-			if maxPreview < 0 {
-				maxPreview = 0
-			}
-			isTruncated := maxPreview > 0 && len(result) > maxPreview
-			if isTruncated {
-				preview = result[:maxPreview] + "... " + colorGray + "[truncated]" + colorReset
-				// Replace newlines for compact single-line display
-				preview = strings.ReplaceAll(preview, "\n", " ↵ ")
-				fmt.Printf("%s  %s✅ %s%s → %s%s\n",
-					colorReset,
-					colorBold,
-					colorGreen, name,
-					colorReset, preview,
-				)
-			} else {
-				fmt.Printf("%s  %s✅ %s%s →%s\n%s\n",
-					colorReset,
-					colorBold,
-					colorGreen, name,
-					colorReset,
-					preview,
-				)
-			}
-		},
-		OnRetry: func(attempt int, err error) {
-			fmt.Printf("\n%s  🔄 Retry %d: %v%s\n",
-				colorBold+colorYellow, attempt, err, colorReset)
-		},
-	})
+	// CLI mode: select mode and start interactive chat
+	modeNames := make([]string, len(cfg.Modes))
+	for i, m := range cfg.Modes {
+		modeNames[i] = m.Name
+	}
+	sort.Strings(modeNames)
+
+	fmt.Println("Доступные режимы:")
+	for i, name := range modeNames {
+		mc := findMode(cfg, name)
+		if mc == nil {
+			continue
+		}
+		fmt.Printf("  %d: %s\n", i+1, mc.Label)
+	}
+	fmt.Printf("Выберите режим (1-%d) [по умолчанию 1]: ", len(modeNames))
+
+	var choice int
+	fmt.Scanf("%d", &choice)
+	if choice < 1 || choice > len(modeNames) {
+		choice = 1
+	}
+	selectedName := modeNames[choice-1]
+	selectedMode := findMode(cfg, selectedName)
+	if selectedMode == nil {
+		log.Fatalf("Mode %q not found", selectedName)
+	}
+
+	// Resolve prompt (panics on error)
+	configDir := filepath.Dir(*configPath)
+	prompt := selectedMode.ResolvePrompt(configDir)
+
+	// Create AI provider
+	prvAI := creative.NewRouterAI(cfg.Provider)
+	ch := creative.NewChat(prvAI)
+	ch.AddSystem(prompt)
+	creative.BooksFolder = selectedMode.BooksFolder
+
+	if selectedMode.BooksFolder != "" {
+		ch.SetTools(append(creative.DefaultTools(), creative.BookTools()...))
+	} else {
+		ch.SetTools(creative.DefaultTools())
+	}
 
 	// Interactive chat loop
 	fmt.Printf("\n")
 	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold+colorBlue, colorReset)
 	fmt.Printf("  %s 📚  IZYseek%s\n", colorBold+colorCyan, colorReset)
 	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold+colorBlue, colorReset)
-	fmt.Printf("  %sBooks:%s %s%s%s\n", colorBold, colorReset, colorGray, *booksDir, colorReset)
-	fmt.Printf("  %sModel:%s %s%s%s\n", colorBold, colorReset, colorGray, *model, colorReset)
-	fmt.Printf("  %sMode:%s %s%s%s\n", colorBold, colorReset, colorGray, m.String(), colorReset)
-	if *thinkingMode {
-		fmt.Printf("  %sThinking:%s %senabled (effort: %s)%s\n", colorBold, colorReset, colorGray, *reasoningEffort, colorReset)
-	}
+	fmt.Printf("  %sMode:%s %s%s%s\n", colorBold, colorReset, colorGray, selectedMode.Label, colorReset)
 	fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold+colorBlue, colorReset)
 	fmt.Printf("  %sType '%sexit%s' or '%squit%s' to stop.%s\n\n", colorDim, colorBold+colorRed, colorDim, colorBold+colorRed, colorDim, colorReset)
 
@@ -219,17 +136,26 @@ func main() {
 			break
 		}
 
-		// Print user message
+		if lower == "/new" {
+			ch = creative.NewChat(prvAI)
+			ch.AddSystem(prompt)
+			if selectedMode.BooksFolder != "" {
+				ch.SetTools(append(creative.DefaultTools(), creative.BookTools()...))
+			} else {
+				ch.SetTools(creative.DefaultTools())
+			}
+			fmt.Printf("%s--- Новый диалог ---%s\n\n", colorBold+colorCyan, colorReset)
+			continue
+		}
+
 		fmt.Printf("\n%s  🎯 %s%s%s\n\n", colorBold+colorGreen, colorReset, input, colorReset)
 
-		// Send to AI with streaming
 		_, err := ch.SendStream(input, true)
 		if err != nil {
 			fmt.Printf("\n%s  ⚠️  Error:%s %v%s\n\n", colorBold+colorRed, colorReset, err, colorReset)
 			continue
 		}
 
-		// Print final blank line after response
 		fmt.Println()
 		fmt.Println()
 	}
@@ -237,4 +163,61 @@ func main() {
 	if err := scanner.Err(); err != nil {
 		log.Fatalf("Input error: %v", err)
 	}
+}
+
+func configHelpText() string {
+	return `Usage: chat -config <path>
+
+Example config.json:
+
+{
+    "provider": {
+        "endpoint": "http://localhost:11434/v1/",
+        "model": "gpt-oss:20b",
+        "key": "",
+        "context_size": 62000,
+        "timeout": "4h",
+        "thinking_mode": false,
+        "reasoning_effort": "high",
+        "user_id": ""
+    },
+    "modes": [
+        {
+            "name": "engineer",
+            "label": "Инженерные нормативы",
+            "prompt_file": "./prompts/engineer.promt",
+            "books_folder": "./books/engineer"
+        },
+        {
+            "name": "simple",
+            "label": "Простой режим",
+            "books_folder": "./books/simple"
+        }
+    ]
+}
+
+Prompt resolution rules:
+  1. If prompt_file is set → read that file
+  2. If prompt_file is not set → look for *.promt in books_folder
+  3. If no .promt found → panic
+  4. If multiple .promt found → panic
+  5. If neither prompt_file nor books_folder → panic
+
+Flags:
+  -config string
+        Path to configuration JSON file (required)
+  -web
+        Run as web server instead of console chat
+  -port string
+        Web server port (default "2345")
+`
+}
+
+func findMode(cfg *creative.Config, name string) *creative.ModeConfig {
+	for i := range cfg.Modes {
+		if cfg.Modes[i].Name == name {
+			return &cfg.Modes[i]
+		}
+	}
+	return nil
 }

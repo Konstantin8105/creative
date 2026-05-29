@@ -39,9 +39,26 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 	}
 
 	sessionID := r.FormValue("session_id")
+	tabID := r.FormValue("tab_id")
 	message := r.FormValue("message")
-	if sessionID == "" || message == "" {
-		http.Error(w, "Missing session_id or message", http.StatusBadRequest)
+
+	if sessionID == "" || tabID == "" || message == "" {
+		http.Error(w, "Missing session_id, tab_id, or message", http.StatusBadRequest)
+		return
+	}
+
+	// Get chat for this tab — check before writing SSE headers
+	chat, err := sm.GetChat(sessionID, tabID)
+	if err != nil {
+		status := http.StatusBadRequest
+		msg := err.Error()
+		if strings.Contains(err.Error(), "session not found") {
+			status = http.StatusGone
+			msg = "Session expired. Please refresh the page to start a new session."
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(map[string]string{"error": "not_found", "message": msg})
 		return
 	}
 
@@ -56,13 +73,9 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		return
 	}
 
-	chat := sm.GetOrCreate(sessionID)
 	var fullContent strings.Builder
 	var fullReasoning strings.Builder
 
-	// sendDoneOnce guarantees the 'done' SSE event is sent exactly once,
-	// even on panic or error. This way the frontend always removes the
-	// typing indicator and shows *something* to the user.
 	var doneOnce sync.Once
 	sendDone := func(contentHTML, reasoningHTML string) {
 		doneOnce.Do(func() {
@@ -74,10 +87,9 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		})
 	}
 
-	// Catch any panic (e.g. nil pointer in callbacks) and show error to user
 	defer func() {
 		if r := recover(); r != nil {
-			errHTML := renderMarkdown(fmt.Sprintf("?? **Internal Error:**\n\n```\n%v\n```", r))
+			errHTML := renderMarkdown(fmt.Sprintf("⚠️ **Internal Error:**\n\n```\n%v\n```", r))
 			sendDone(errHTML, "")
 		}
 	}()
@@ -121,22 +133,18 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		},
 	})
 
-	_, err := chat.SendStream(message, true)
+	_, err = chat.SendStream(message, true)
 	if err != nil {
-		// Defensive fallback: if chat.SendStream returned an error but the
-		// callback already buffered partial content (e.g. from stream errors),
-		// show the partial content together with the error message.
 		partialContent := strings.TrimSpace(fullContent.String())
 		partialReasoning := strings.TrimSpace(fullReasoning.String())
 		if partialContent != "" || partialReasoning != "" {
-			errNote := fmt.Sprintf("\n\n---\n?? **Connection lost:** `%s`", err.Error())
+			errNote := fmt.Sprintf("\n\n---\n🔌 **Connection lost:** `%s`", err.Error())
 			fullContent.WriteString(errNote)
 			sendDone(renderMarkdown(fullContent.String()), renderMarkdown(partialReasoning))
 			return
 		}
 
-		// No partial content — show error as a regular assistant message
-		errHTML := renderMarkdown(fmt.Sprintf("?? **Error:**\n\n```\n%s\n```", err.Error()))
+		errHTML := renderMarkdown(fmt.Sprintf("⚠️ **Error:**\n\n```\n%s\n```", err.Error()))
 		sendDone(errHTML, "")
 		return
 	}
@@ -146,12 +154,141 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 	sendDone(contentHTML, reasoningHTML)
 }
 
-func handleConfig(w http.ResponseWriter, r *http.Request, mode creative.Mode) {
+func handleConfig(w http.ResponseWriter, r *http.Request, cfg *creative.Config) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"mode":  string(mode),
-		"label": mode.String(),
+
+	defaultMode := ""
+	if len(cfg.Modes) > 0 {
+		defaultMode = cfg.Modes[0].Name
+	}
+
+	type modeInfo struct {
+		Name  string `json:"name"`
+		Label string `json:"label"`
+	}
+
+	modes := make([]modeInfo, len(cfg.Modes))
+	for i, m := range cfg.Modes {
+		modes[i] = modeInfo{Name: m.Name, Label: m.Label}
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"default_mode": defaultMode,
+		"modes":        modes,
 	})
+}
+
+func handleTabsCreate(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionID := r.FormValue("session_id")
+	modeName := r.FormValue("mode")
+	if sessionID == "" || modeName == "" {
+		http.Error(w, "Missing session_id or mode", http.StatusBadRequest)
+		return
+	}
+
+	tabID, err := sm.CreateTab(sessionID, modeName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"tab_id": tabID})
+}
+
+func handleTabsList(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		http.Error(w, "Missing session_id", http.StatusBadRequest)
+		return
+	}
+
+	tabs, err := sm.ListTabs(sessionID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusGone)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "session_expired",
+			"message": "Session expired. Please refresh the page to start a new session.",
+		})
+		return
+	}
+
+	defaultMode := ""
+	if len(sm.cfg.Modes) > 0 {
+		defaultMode = sm.cfg.Modes[0].Name
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tabs":         tabs,
+		"default_mode": defaultMode,
+	})
+}
+
+func handleTabsClose(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionID := r.FormValue("session_id")
+	tabID := r.FormValue("tab_id")
+	if sessionID == "" || tabID == "" {
+		http.Error(w, "Missing session_id or tab_id", http.StatusBadRequest)
+		return
+	}
+
+	if err := sm.CloseTab(sessionID, tabID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusGone)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":   "session_expired",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{})
+}
+
+func handleHeartbeat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionID := r.FormValue("session_id")
+	if sessionID == "" {
+		http.Error(w, "Missing session_id", http.StatusBadRequest)
+		return
+	}
+
+	sm.Heartbeat(sessionID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{})
+}
+
+func handleSessionClose(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionID := r.FormValue("session_id")
+	if sessionID != "" {
+		sm.CloseSession(sessionID)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{})
 }
 
 func renderMarkdown(text string) string {

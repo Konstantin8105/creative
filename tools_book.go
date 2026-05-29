@@ -2,7 +2,6 @@ package creative
 
 import (
 	"bufio"
-	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,66 +9,6 @@ import (
 	"sort"
 	"strings"
 )
-
-//go:embed system_prompt_engineer.txt
-var engineerPrompt string
-
-//go:embed system_prompt_psy.txt
-var psyPrompt string
-
-//go:embed system_prompt_law.txt
-var lawPrompt string
-
-//go:embed system_prompt_science.txt
-var sciencePrompt string
-
-//go:embed system_prompt_software.txt
-var softwarePrompt string
-
-// Mode represents an analysis mode that selects system prompt and display label.
-type Mode string
-
-const (
-	ModeEngineer Mode = "engineer" // Инженерные нормативы (СП, ГОСТ, СНиП)
-	ModePsy      Mode = "psy"      // Психологическая литература
-	ModeLaw      Mode = "law"      // Правовые документы (законы, кодексы)
-	ModeScience  Mode = "science"  // Научные и инженерные исследования
-	ModeSoftware Mode = "software" // Справка по программному обеспечению
-)
-
-// String returns a human-readable label for the mode (used in UI headers).
-func (m Mode) String() string {
-	switch m {
-	case ModeEngineer:
-		return "📚 Инженерные нормативы"
-	case ModePsy:
-		return "🧠 Психология"
-	case ModeLaw:
-		return "⚖️  Правовые документы"
-	case ModeScience:
-		return "🔬 Научные исследования"
-	case ModeSoftware:
-		return "💻 Программное обеспечение"
-	}
-	panic(fmt.Errorf("Undefined mode: `%s`", string(m)))
-}
-
-// GetPrompt returns the embedded system prompt content for this mode.
-func (m Mode) GetPrompt() string {
-	switch m {
-	case ModeEngineer:
-		return engineerPrompt
-	case ModePsy:
-		return psyPrompt
-	case ModeLaw:
-		return lawPrompt
-	case ModeScience:
-		return sciencePrompt
-	case ModeSoftware:
-		return softwarePrompt
-	}
-	panic(fmt.Errorf("Undefined mode: `%s`", string(m)))
-}
 
 // BooksFolder — путь к папке с книгами.
 // Устанавливается один раз перед использованием BookTools.
@@ -164,19 +103,16 @@ func resolveFile(filename string) (fullPath string, errMsg string) {
 	if filename == "" {
 		return "", "Ошибка: не указано имя файла. Используйте list_books для просмотра доступных книг."
 	}
-	// Проверка расширения
 	ext := strings.ToLower(filepath.Ext(filename))
 	if ext != ".txt" && ext != ".md" {
 		return "", fmt.Sprintf("Ошибка: файл %q имеет расширение %s. Поддерживаются только файлы .txt и .md.", filename, ext)
 	}
-	// Проверка, что файл не выходит за пределы BooksFolder
 	fullPath = filepath.Clean(filepath.Join(BooksFolder, filename))
 	booksFolderClean := filepath.Clean(BooksFolder)
 	if !strings.HasPrefix(fullPath, booksFolderClean+string(os.PathSeparator)) &&
 		fullPath != booksFolderClean {
 		return "", fmt.Sprintf("Ошибка: файл %q должен находиться в папке книг.", filename)
 	}
-	// Проверка существования
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -190,7 +126,6 @@ func resolveFile(filename string) (fullPath string, errMsg string) {
 	return fullPath, ""
 }
 
-// countLines возвращает количество строк в файле.
 func countLines(path string) int {
 	f, err := os.Open(path)
 	if err != nil {
@@ -205,7 +140,6 @@ func countLines(path string) int {
 	return lines
 }
 
-// formatFileSize форматирует размер файла в человекочитаемый вид.
 func formatFileSize(bytes int64) string {
 	switch {
 	case bytes >= 1024*1024:
@@ -217,7 +151,6 @@ func formatFileSize(bytes int64) string {
 	}
 }
 
-// listBooksTool возвращает список всех .txt и .md файлов в BooksFolder.
 func listBooksTool(params string) string {
 	if BooksFolder == "" {
 		return "Ошибка: не указана папка с книгами. Установите переменную BooksFolder."
@@ -233,7 +166,7 @@ func listBooksTool(params string) string {
 	var files []string
 	err = filepath.Walk(BooksFolder, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
-			return nil // skip inaccessible files
+			return nil
 		}
 		if fi.IsDir() {
 			return nil
@@ -268,18 +201,14 @@ func listBooksTool(params string) string {
 	return b.String()
 }
 
-// readBookLinesTool читает строки из файла в заданном диапазоне.
 func readBookLinesTool(params string) string {
-	// Парсинг параметров: filename start_line end_line
 	parts := strings.Fields(params)
 	if len(parts) < 3 {
 		return "Ошибка: недостаточно параметров. Используйте: read_book_lines имя_файла начальная_строка конечная_строка"
 	}
 
-	// Имя файла может содержать пробелы, если оно заключено в кавычки
 	var filename string
 	if strings.HasPrefix(params, "\"") {
-		// Имя файла в кавычках
 		endQuote := strings.Index(params[1:], "\"")
 		if endQuote < 0 {
 			return "Ошибка: неверный формат. Используйте: read_book_lines \"имя файла.txt\" 1 50"
@@ -291,7 +220,6 @@ func readBookLinesTool(params string) string {
 			return "Ошибка: недостаточно параметров. Укажите начальную и конечную строку."
 		}
 	} else {
-		// Простой случай — имя файла без пробелов
 		filename = parts[0]
 		parts = parts[1:]
 	}
@@ -346,7 +274,6 @@ func readBookLinesTool(params string) string {
 		currentLine++
 	}
 
-	// Если запрошенный диапазон выходит за конец файла
 	if currentLine <= startLine {
 		totalLines := currentLine - 1
 		return fmt.Sprintf("Файл %q содержит только %d строк. Запрошен диапазон %d-%d.", filename, totalLines, startLine, endLine)
@@ -355,17 +282,13 @@ func readBookLinesTool(params string) string {
 	return b.String()
 }
 
-// searchInBookTool ищет по ключевым словам или regex в файле.
 func searchInBookTool(params string) string {
-	// Парсинг: filename "pattern" [mode]
-	// Имя файла может быть в кавычках или без
 	params = strings.TrimSpace(params)
 
 	if params == "" {
 		return "Ошибка: не указаны параметры. Используйте: search_in_book имя_файла \"паттерн\" [режим]"
 	}
 
-	// Пытаемся найти имя файла (может быть в кавычках или без)
 	if strings.HasPrefix(params, "\"") {
 		endQuote := strings.Index(params[1:], "\"")
 		if endQuote < 0 {
@@ -386,11 +309,9 @@ func searchInBookTool(params string) string {
 			if errMsg != "" {
 				return errMsg
 			}
-			// Режим опционально после кавычек
 			mode := strings.TrimSpace(remaining[endQuote2+2:])
 			return runSearch(fullPath, filename, pattern, mode)
 		}
-		// Без кавычек — всё остальное это паттерн (может быть многословным)
 		mode, pattern := splitLastMode(remaining)
 		fullPath, errMsg := resolveFile(filename)
 		if errMsg != "" {
@@ -399,13 +320,11 @@ func searchInBookTool(params string) string {
 		return runSearch(fullPath, filename, pattern, mode)
 	}
 
-	// Имя файла без кавычек
 	parts := strings.Fields(params)
 	if len(parts) < 2 {
 		return "Ошибка: недостаточно параметров. Используйте: search_in_book имя_файла \"паттерн\""
 	}
 	filename := parts[0]
-	// Всё после имени файла — это паттерн. Последнее слово может быть режимом.
 	remaining := strings.Join(parts[1:], " ")
 	mode, pattern := splitLastMode(remaining)
 	fullPath, errMsg := resolveFile(filename)
@@ -415,8 +334,6 @@ func searchInBookTool(params string) string {
 	return runSearch(fullPath, filename, pattern, mode)
 }
 
-// splitLastMode проверяет, является ли последнее слово режимом поиска.
-// Если да — возвращает его отдельно. Иначе всё считается паттерном.
 func splitLastMode(s string) (mode, pattern string) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -430,20 +347,13 @@ func splitLastMode(s string) (mode, pattern string) {
 	if last == "keyword" || last == "regex" {
 		return last, strings.Join(fields[:len(fields)-1], " ")
 	}
-	// Последнее слово не является известным режимом — всё это паттерн
 	return "", s
 }
 
-// regexMetacharacters contains characters that indicate a regex pattern.
-// When a pattern contains any of these (beyond the keyword OR pipe),
-// it is auto-detected as regex.
 var regexMetacharacters = []string{
 	".", "*", "+", "[", "]", "(", ")", "^", "$", "\\", "?", "{", "}",
 }
 
-// looksLikeRegex checks if the pattern contains regex metacharacters
-// (beyond simple `|` which is used for keyword OR mode).
-// Returns true if the pattern looks like a regular expression.
 func looksLikeRegex(pattern string) bool {
 	for _, mc := range regexMetacharacters {
 		if strings.Contains(pattern, mc) {
@@ -453,7 +363,6 @@ func looksLikeRegex(pattern string) bool {
 	return false
 }
 
-// runSearch выполняет поиск по ключевым словам или regex.
 func runSearch(fullPath, filename, pattern, mode string) string {
 	if pattern == "" {
 		return "Ошибка: не указан паттерн для поиска. Используйте search_in_book имя_файла \"текст для поиска\""
@@ -461,13 +370,10 @@ func runSearch(fullPath, filename, pattern, mode string) string {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	switch mode {
 	case "", "keyword":
-		// Auto-detect: if pattern contains regex metacharacters and compiles as regex,
-		// automatically switch to regex mode for better search results.
 		if looksLikeRegex(pattern) {
 			if _, err := regexp.Compile(pattern); err == nil {
 				return searchByRegex(fullPath, filename, pattern)
 			}
-			// Doesn't compile as regex — fall through to keyword mode
 		}
 		return searchByKeyword(fullPath, filename, pattern)
 	case "regex":
@@ -477,9 +383,6 @@ func runSearch(fullPath, filename, pattern, mode string) string {
 	}
 }
 
-// searchByKeyword ищет регистронезависимые вхождения подстроки.
-// Поддерживает pipe | как OR-разделитель: "якор|коллапс|схлоп" ищет
-// любое из этих слов. Одиночный термин работает как обычный Contains.
 func searchByKeyword(fullPath, filename, pattern string) string {
 	f, err := os.Open(fullPath)
 	if err != nil {
@@ -487,7 +390,6 @@ func searchByKeyword(fullPath, filename, pattern string) string {
 	}
 	defer f.Close()
 
-	// Разбиваем паттерн по | для OR-поиска
 	orParts := splitOR(pattern)
 	scanner := bufio.NewScanner(f)
 	var b strings.Builder
@@ -522,9 +424,6 @@ func searchByKeyword(fullPath, filename, pattern string) string {
 	return result.String()
 }
 
-// splitOR разбивает паттерн по символу | для OR-поиска.
-// Обрезает пробелы у каждой части, отфильтровывает пустые.
-// Если после фильтрации частей не осталось, возвращает оригинальный паттерн как одну часть (fallback).
 func splitOR(pattern string) []string {
 	raw := strings.Split(pattern, "|")
 	var parts []string
@@ -535,14 +434,11 @@ func splitOR(pattern string) []string {
 		}
 	}
 	if len(parts) == 0 {
-		// Все части были пустыми — ищем literal "|"
 		return []string{strings.ToLower(pattern)}
 	}
 	return parts
 }
 
-// matchesAnyOR проверяет, содержит ли строка lineLower хотя бы одну из частей orParts.
-// Если orParts состоит из одного элемента — использует strings.Contains (оптимизация).
 func matchesAnyOR(lineLower string, orParts []string) bool {
 	if len(orParts) == 1 {
 		return strings.Contains(lineLower, orParts[0])
@@ -555,7 +451,6 @@ func matchesAnyOR(lineLower string, orParts []string) bool {
 	return false
 }
 
-// searchByRegex ищет по регулярному выражению.
 func searchByRegex(fullPath, filename, pattern string) string {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -600,14 +495,12 @@ func searchByRegex(fullPath, filename, pattern string) string {
 	return result.String()
 }
 
-// bookInfoTool возвращает мета-информацию о файле.
 func bookInfoTool(params string) string {
 	params = strings.TrimSpace(params)
 	if params == "" {
 		return "Ошибка: не указано имя файла. Используйте: book_info имя_файла"
 	}
 
-	// Strip surrounding quotes if present (e.g. from native tool call conversion)
 	params = strings.Trim(params, "\"")
 
 	fullPath, errMsg := resolveFile(params)

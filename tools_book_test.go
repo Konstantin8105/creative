@@ -27,11 +27,13 @@ func TestBookTools(t *testing.T) {
 	// executeTool выполняет инструмент по имени с параметрами
 	executeTool := func(t *testing.T, name, params string) string {
 		t.Helper()
-		result, err := creative.ExecuteTool(name, params, tools)
-		if err != nil {
-			t.Fatalf("ExecuteTool(%q, %q): %v", name, params, err)
+		for _, tool := range tools {
+			if tool.Name == name {
+				return tool.Execute(params)
+			}
 		}
-		return result
+		t.Fatalf("tool %q not found", name)
+		return ""
 	}
 
 	t.Run("list_books", func(t *testing.T) {
@@ -404,10 +406,7 @@ func TestBookTools(t *testing.T) {
 		}
 		defer os.Remove(tmpFile)
 
-		result, err := creative.ExecuteTool("book_info", "\"СП 16.13330.2017 Тестовый файл.txt\"", tools)
-		if err != nil {
-			t.Fatalf("book_info with spaced filename: %v", err)
-		}
+		result := executeTool(t, "book_info", "\"СП 16.13330.2017 Тестовый файл.txt\"")
 		if !strings.Contains(result, "Файл:") || !strings.Contains(result, "Тестовый файл") {
 			t.Errorf("book_info should work with spaced filename, got:\n%s", result)
 		}
@@ -422,10 +421,7 @@ func TestBookTools(t *testing.T) {
 		}
 		defer os.Remove(tmpFile)
 
-		result, err := creative.ExecuteTool("search_in_book", "\"ГОСТ 32569-2013 Трубопроводы.txt\" болт", tools)
-		if err != nil {
-			t.Fatalf("search_in_book with spaced filename: %v", err)
-		}
+		result := executeTool(t, "search_in_book", "\"ГОСТ 32569-2013 Трубопроводы.txt\" болт")
 		if !strings.Contains(result, "болт") {
 			t.Errorf("search_in_book should find 'болт' in spaced filename, got:\n%s", result)
 		}

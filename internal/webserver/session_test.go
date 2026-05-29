@@ -1,154 +1,294 @@
 package webserver
 
 import (
-	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Konstantin8105/creative"
 )
 
+func newTestConfig(t *testing.T) (*creative.Config, string) {
+	t.Helper()
+
+	dir := t.TempDir()
+
+	// Create a prompt file
+	promtPath := filepath.Join(dir, "test.promt")
+	if err := os.WriteFile(promtPath, []byte("You are a test assistant."), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &creative.Config{}
+	// Use reflection/field access — configDir is unexported but we can set it
+	// by creating the config through LoadConfig
+	jsonPath := filepath.Join(dir, "config.json")
+	jsonContent := `{
+		"provider": {
+			"endpoint": "http://localhost:11434/v1/",
+			"model": "test-model",
+			"context_size": 4096,
+			"timeout": "30s"
+		},
+		"modes": [
+			{
+				"name": "test",
+				"label": "Test Mode",
+				"prompt_file": "test.promt"
+			}
+		]
+	}`
+	if err := os.WriteFile(jsonPath, []byte(jsonContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := creative.LoadConfig(jsonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return cfg, dir
+}
+
 func TestNewSessionManager(t *testing.T) {
-	sm := NewSessionManager(1*time.Hour, func() *creative.Chat {
-		return creative.NewChat(nil)
-	})
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
 	if sm == nil {
 		t.Fatal("NewSessionManager returned nil")
 	}
-	if sm.ttl != 1*time.Hour {
-		t.Errorf("ttl = %v, want 1h", sm.ttl)
-	}
-	if sm.Count() != 0 {
-		t.Errorf("Count() = %d, want 0", sm.Count())
-	}
 	sm.Stop()
 }
 
-func TestSessionManager_GetOrCreate(t *testing.T) {
-	sm := NewSessionManager(1*time.Hour, func() *creative.Chat {
-		return creative.NewChat(nil)
-	})
+func TestTabCreateAndList(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
 	defer sm.Stop()
 
-	ch1 := sm.GetOrCreate("session_1")
-	if ch1 == nil {
-		t.Fatal("GetOrCreate returned nil")
+	// Create tabs in different sessions
+	tab1, err := sm.CreateTab("session_1", "test")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if sm.Count() != 1 {
-		t.Errorf("Count() = %d, want 1", sm.Count())
-	}
-
-	// Same session ID returns cached Chat
-	ch2 := sm.GetOrCreate("session_1")
-	if ch2 != ch1 {
-		t.Error("GetOrCreate should return the same Chat for the same session")
-	}
-	if sm.Count() != 1 {
-		t.Errorf("Count() = %d, want 1", sm.Count())
+	if tab1 == "" {
+		t.Fatal("expected non-empty tab ID")
 	}
 
-	// Different session ID returns new Chat
-	ch3 := sm.GetOrCreate("session_2")
-	if ch3 == nil {
-		t.Fatal("GetOrCreate returned nil for new session")
+	// Second tab in same session
+	tab2, err := sm.CreateTab("session_1", "test")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if ch3 == ch1 {
-		t.Error("GetOrCreate should return a different Chat for different session")
+	if tab2 == tab1 {
+		t.Error("expected different tab IDs for different tabs")
 	}
-	if sm.Count() != 2 {
-		t.Errorf("Count() = %d, want 2", sm.Count())
+
+	// Tab in different session
+	tab3, err := sm.CreateTab("session_2", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = tab3
+
+	// List tabs per session
+	tabs1, err := sm.ListTabs("session_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tabs1) != 2 {
+		t.Fatalf("expected 2 tabs in session_1, got %d", len(tabs1))
+	}
+
+	tabs2, err := sm.ListTabs("session_2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tabs2) != 1 {
+		t.Fatalf("expected 1 tab in session_2, got %d", len(tabs2))
 	}
 }
 
-func TestSessionManager_ConcurrentAccess(t *testing.T) {
-	sm := NewSessionManager(1*time.Hour, func() *creative.Chat {
-		return creative.NewChat(nil)
-	})
+func TestListTabs_SessionNotFound(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
 	defer sm.Stop()
 
-	done := make(chan struct{})
-	const n = 10
+	_, err := sm.ListTabs("nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent session")
+	}
+}
+
+func TestCreateTab(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	defer sm.Stop()
+
+	tabID, err := sm.CreateTab("session_a", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tabID == "" {
+		t.Fatal("expected non-empty tab ID")
+	}
+
+	// Tab should be listable
+	tabs, err := sm.ListTabs("session_a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tabs) != 1 {
+		t.Fatalf("expected 1 tab, got %d", len(tabs))
+	}
+	if tabs[0].Mode != "test" {
+		t.Errorf("tab mode = %q, want %q", tabs[0].Mode, "test")
+	}
+}
+
+func TestCreateTab_UnknownMode(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	defer sm.Stop()
+
+	_, err := sm.CreateTab("session_b", "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for unknown mode")
+	}
+}
+
+func TestCloseTab(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	defer sm.Stop()
+
+	tabID, err := sm.CreateTab("session_c", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Close the tab
+	if err := sm.CloseTab("session_c", tabID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Session should be deleted (no tabs) — ListTabs should fail
+	_, err = sm.ListTabs("session_c")
+	if err == nil {
+		t.Error("expected session to be deleted after closing last tab")
+	}
+}
+
+func TestCloseTab_NotFound(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	defer sm.Stop()
+
+	if err := sm.CloseTab("nonexistent", "tab_x"); err == nil {
+		t.Fatal("expected error for nonexistent session")
+	}
+}
+
+func TestGetChat(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	defer sm.Stop()
+
+	tabID, err := sm.CreateTab("session_d", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chat, err := sm.GetChat("session_d", tabID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chat == nil {
+		t.Fatal("GetChat returned nil")
+	}
+}
+
+func TestGetChat_SessionNotFound(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	defer sm.Stop()
+
+	_, err := sm.GetChat("nonexistent", "tab_x")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestHeartbeat(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	defer sm.Stop()
+
+	// Create a tab to establish session
+	_, err := sm.CreateTab("session_e", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Heartbeat should not panic or error
+	sm.Heartbeat("session_e")
+
+	// Session should still be alive
+	tabs, err := sm.ListTabs("session_e")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tabs) != 1 {
+		t.Errorf("expected 1 tab, got %d", len(tabs))
+	}
+}
+
+func TestCloseSession(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	defer sm.Stop()
+
+	// Create a tab to establish session
+	_, err := sm.CreateTab("session_f", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sm.CloseSession("session_f")
+
+	// Session should be deleted
+	_, err = sm.ListTabs("session_f")
+	if err == nil {
+		t.Error("expected session to be deleted after CloseSession")
+	}
+}
+
+func TestConcurrentTabs(t *testing.T) {
+	cfg, dir := newTestConfig(t)
+	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	defer sm.Stop()
+
+	const n = 20
+	var wg sync.WaitGroup
+	wg.Add(n)
+
 	for i := 0; i < n; i++ {
-		go func(id int) {
-			sm.GetOrCreate(fmt.Sprintf("session_%d", id))
-			done <- struct{}{}
-		}(i)
-	}
-	for i := 0; i < n; i++ {
-		<-done
-	}
-	if sm.Count() != n {
-		t.Errorf("Count() = %d, want %d after concurrent access", sm.Count(), n)
-	}
-}
-
-func TestSessionManager_Cleanup(t *testing.T) {
-	sm := NewSessionManager(50*time.Millisecond, func() *creative.Chat {
-		return creative.NewChat(nil)
-	})
-	defer sm.Stop()
-
-	sm.GetOrCreate("session_a")
-	sm.GetOrCreate("session_b")
-
-	if sm.Count() != 2 {
-		t.Fatalf("Count() = %d, want 2 before cleanup", sm.Count())
+		go func() {
+			defer wg.Done()
+			_, err := sm.CreateTab("concurrent", "test")
+			if err != nil {
+				t.Errorf("CreateTab: %v", err)
+			}
+		}()
 	}
 
-	// Wait for cleanup to run (cleanupLoop runs every 5 min by default,
-	// but cleanup is also called directly in the loop.
-	// We just need to wait and then manually trigger cleanup via sleep and
-	// let the goroutine do its work. Since our TTL is very short (50ms),
-	// the next tick (5 min) would be too long. Instead we call cleanup directly.
-	time.Sleep(100 * time.Millisecond)
-	sm.cleanup()
+	wg.Wait()
 
-	if sm.Count() != 0 {
-		t.Errorf("Count() = %d, want 0 after cleanup", sm.Count())
+	tabs, err := sm.ListTabs("concurrent")
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestSessionManager_Stop(t *testing.T) {
-	sm := NewSessionManager(1*time.Hour, func() *creative.Chat {
-		return creative.NewChat(nil)
-	})
-
-	sm.GetOrCreate("test_session")
-	if sm.Count() != 1 {
-		t.Fatalf("Count() = %d, want 1", sm.Count())
-	}
-
-	sm.Stop()
-
-	// After Stop, the cleanup goroutine should exit (no panic).
-	// The sessions map still has the session (Stop doesn't clear it).
-	if sm.Count() != 1 {
-		t.Errorf("Count() = %d, want 1 (Stop should not clear sessions)", sm.Count())
-	}
-}
-
-func TestSessionManager_DoubleCheck(t *testing.T) {
-	// Test the double-check locking pattern in GetOrCreate
-	factoryCount := 0
-	sm := NewSessionManager(1*time.Hour, func() *creative.Chat {
-		factoryCount++
-		return creative.NewChat(nil)
-	})
-	defer sm.Stop()
-
-	// Create a session, then call GetOrCreate with the same ID concurrently
-	sm.GetOrCreate("test")
-
-	// This should hit the fast path (RLock -> exists) and NOT call factory
-	_ = sm.GetOrCreate("test")
-	if factoryCount != 1 {
-		t.Errorf("factory called %d times, want 1", factoryCount)
-	}
-
-	// Also test the slow path double-check (write lock) scenario.
-	// After first creation, subsequent calls should NOT create duplicates.
-	_ = sm.GetOrCreate("test")
-	if factoryCount != 1 {
-		t.Errorf("factory called %d times, want 1 (double-check failed)", factoryCount)
+	if len(tabs) != n {
+		t.Errorf("expected %d tabs, got %d", n, len(tabs))
 	}
 }
