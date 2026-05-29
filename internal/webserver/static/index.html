@@ -25,7 +25,7 @@
   --cyan: #7dcfff;           /* заголовки h1-h4, em, заголовки таблиц */
 
   /* ─── Границы ─── */
-  --border: #33467c;         /* все边框 */
+  --border: #5871b8;         /* все边框 */
 
   /* ─── Наложение ─── */
   --overlay: rgba(0,0,0,0.6); /* затемнение под модалкой */
@@ -467,13 +467,15 @@ body {
     if (panel) panel.remove();
 
     // Determine next active tab
-    const remaining = Object.keys(tabs);
-    const idx = remaining.indexOf(tabId);
+    const idx = Object.keys(tabs).indexOf(tabId);
     delete tabs[tabId];
 
     if (activeTabId === tabId) {
-      const nextId = remaining[idx] || remaining[idx - 1] || remaining[0];
-      if (nextId && tabs[nextId]) switchTab(nextId);
+      const remainingIds = Object.keys(tabs);
+      if (remainingIds.length > 0) {
+        const nextIdx = Math.min(idx, remainingIds.length - 1);
+        switchTab(remainingIds[nextIdx]);
+      }
     }
   };
 
