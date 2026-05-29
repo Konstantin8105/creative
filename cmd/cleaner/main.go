@@ -95,7 +95,7 @@ func cleanFile(modeName, filePath string) {
 
 	var cleaned []string
 	for _, line := range lines {
-		line = strings.ReplaceAll(line, "\r", "")
+		// line = strings.ReplaceAll(line, "\r", "")
 		line = strings.TrimSpace(line)
 		if line != "" {
 			cleaned = append(cleaned, line)
