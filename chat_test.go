@@ -59,7 +59,7 @@ func TestChat(t *testing.T) {
 					ID:   "call_test_1",
 					Type: "function",
 					Function: creative.ToolCallFunction{
-						Name:      "get_current_time",
+						Name:      "mock_tool",
 						Arguments: "{}",
 					},
 				},
@@ -67,7 +67,18 @@ func TestChat(t *testing.T) {
 			toolCallsFinalResponse: "Финальный ответ после исчерпания итераций",
 		}
 		ch := creative.NewChat(prv)
-		ch.SetTools(creative.DefaultTools())
+		ch.SetTools([]creative.Tool{
+			{
+				Name:        "mock_tool",
+				Description: "Mock tool for testing",
+				Parameters: &creative.ToolParameters{
+					Type:       "object",
+					Properties: map[string]creative.ToolProperty{},
+					Required:   []string{},
+				},
+				Execute: func(params string) string { return "mock result" },
+			},
+		})
 
 		resp, err := ch.SendStream("test", true)
 		if err != nil {
@@ -83,12 +94,23 @@ func TestChat(t *testing.T) {
 
 		prv := &TestAi{
 			toolCallsOnToolRequest: []creative.ToolCall{
-				{ID: "call_1", Type: "function", Function: creative.ToolCallFunction{Name: "get_current_time", Arguments: "{}"}},
+				{ID: "call_1", Type: "function", Function: creative.ToolCallFunction{Name: "mock_tool", Arguments: "{}"}},
 			},
 			toolCallsFinalResponse: "done",
 		}
 		ch := creative.NewChat(prv)
-		tools := creative.DefaultTools()
+		tools := []creative.Tool{
+			{
+				Name:        "mock_tool",
+				Description: "Mock tool for testing",
+				Parameters: &creative.ToolParameters{
+					Type:       "object",
+					Properties: map[string]creative.ToolProperty{},
+					Required:   []string{},
+				},
+				Execute: func(params string) string { return "mock result" },
+			},
+		}
 		ch.SetTools(tools)
 
 		_, err := ch.SendStream("test", true)
@@ -99,8 +121,8 @@ func TestChat(t *testing.T) {
 		if len(ch.Tools) == 0 {
 			t.Error("ch.Tools is empty after exhaustion — tools were not restored")
 		}
-		if ch.Tools[0].Name != "get_current_time" {
-			t.Errorf("ch.Tools[0].Name = %q, want %q", ch.Tools[0].Name, "get_current_time")
+		if ch.Tools[0].Name != "mock_tool" {
+			t.Errorf("ch.Tools[0].Name = %q, want %q", ch.Tools[0].Name, "mock_tool")
 		}
 	})
 

@@ -104,9 +104,7 @@ func main() {
 	creative.BooksFolder = selectedMode.BooksFolder
 
 	if selectedMode.BooksFolder != "" {
-		ch.SetTools(append(creative.DefaultTools(), creative.BookTools()...))
-	} else {
-		ch.SetTools(creative.DefaultTools())
+		ch.SetTools(creative.BookTools())
 	}
 
 	// Interactive chat loop
@@ -140,9 +138,7 @@ func main() {
 			ch = creative.NewChat(prvAI)
 			ch.AddSystem(prompt)
 			if selectedMode.BooksFolder != "" {
-				ch.SetTools(append(creative.DefaultTools(), creative.BookTools()...))
-			} else {
-				ch.SetTools(creative.DefaultTools())
+				ch.SetTools(creative.BookTools())
 			}
 			fmt.Printf("%s--- Новый диалог ---%s\n\n", colorBold+colorCyan, colorReset)
 			continue

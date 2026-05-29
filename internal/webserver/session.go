@@ -79,9 +79,7 @@ func (sm *SessionManager) CreateTab(sessionID, modeName string) (tabID string, e
 	ch.AddSystem(prompt)
 
 	if modeCfg.BooksFolder != "" {
-		ch.SetTools(append(creative.DefaultTools(), creative.BookTools()...))
-	} else {
-		ch.SetTools(creative.DefaultTools())
+		ch.SetTools(creative.BookTools())
 	}
 
 	tabID = generateID()

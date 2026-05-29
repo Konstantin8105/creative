@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 )
 
 // ToolParameters defines JSON Schema for native tool parameters.
@@ -32,20 +31,7 @@ type Tool struct {
 
 // DefaultTools returns the default set of tools available to agents.
 func DefaultTools() []Tool {
-	return []Tool{
-		{
-			Name:        "get_current_time",
-			Description: "Get current date and time. Returns current system time in RFC 3339 format.",
-			Parameters: &ToolParameters{
-				Type:       "object",
-				Properties: map[string]ToolProperty{},
-				Required:   []string{},
-			},
-			Execute: func(params string) string {
-				return time.Now().Format(time.RFC3339)
-			},
-		},
-	}
+	return []Tool{}
 }
 
 // ToolParamsToString converts JSON arguments from native tool_calls

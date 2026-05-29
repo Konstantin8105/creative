@@ -178,9 +178,10 @@ func TestBookTools(t *testing.T) {
 	})
 
 	t.Run("search_in_book_empty_pattern", func(t *testing.T) {
+		// When only a filename is given with no pattern, search across all books
 		result := executeTool(t, "search_in_book", "book_sample.txt")
-		if !strings.Contains(result, "Ошибка") {
-			t.Errorf("should reject empty pattern, got:\n%s", result)
+		if !strings.Contains(strings.ToLower(result), "не найдено") {
+			t.Errorf("should search all books and find no matches, got:\n%s", result)
 		}
 	})
 
@@ -196,6 +197,25 @@ func TestBookTools(t *testing.T) {
 		result := executeTool(t, "search_in_book", "book_sample.txt румяное яблоко")
 		if !strings.Contains(result, "румяное яблоко") {
 			t.Errorf("should find the multi-word pattern, got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_all_books_keyword", func(t *testing.T) {
+		// Search without filename — searches all books
+		result := executeTool(t, "search_in_book", "Париж keyword")
+		if !strings.Contains(result, "Париж") {
+			t.Errorf("all-books search should find 'Париж', got:\n%s", result)
+		}
+		if !strings.Contains(result, "book_sample.txt") {
+			t.Errorf("all-books search should show which book, got:\n%s", result)
+		}
+	})
+
+	t.Run("search_in_book_all_books_no_match", func(t *testing.T) {
+		// Search without filename — no matches across all books
+		result := executeTool(t, "search_in_book", "ZZZZZnotfound")
+		if !strings.Contains(strings.ToLower(result), "не найдено") {
+			t.Errorf("all-books search should report no matches, got:\n%s", result)
 		}
 	})
 

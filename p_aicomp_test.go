@@ -272,7 +272,7 @@ func TestRouterAI_SendStream_ToolCallAccumulation(t *testing.T) {
 			t.Fatal("expected http.Flusher")
 		}
 		// Tool call in parts across multiple chunks
-		fmt.Fprintf(w, `data: {"choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_current_time","arguments":""}}]}}]}`+"\n\n")
+		fmt.Fprintf(w, `data: {"choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"mock_tool","arguments":""}}]}}]}`+"\n\n")
 		flusher.Flush()
 		fmt.Fprintf(w, `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]}}]}`+"\n\n")
 		flusher.Flush()
@@ -296,8 +296,8 @@ func TestRouterAI_SendStream_ToolCallAccumulation(t *testing.T) {
 	if len(resp.ToolCalls) != 1 {
 		t.Fatalf("expected 1 tool call, got %d", len(resp.ToolCalls))
 	}
-	if resp.ToolCalls[0].Function.Name != "get_current_time" {
-		t.Errorf("tool name=%q, want %q", resp.ToolCalls[0].Function.Name, "get_current_time")
+	if resp.ToolCalls[0].Function.Name != "mock_tool" {
+		t.Errorf("tool name=%q, want %q", resp.ToolCalls[0].Function.Name, "mock_tool")
 	}
 }
 
@@ -410,10 +410,14 @@ func TestLMStudio(t *testing.T) {
 	})
 
 	t.Run("ToolCall", func(t *testing.T) {
-		ch := creative.NewChat(ai)
-		ch.SetTools(creative.DefaultTools())
+		oldFolder := creative.BooksFolder
+		creative.BooksFolder = "testdata"
+		defer func() { creative.BooksFolder = oldFolder }()
 
-		resp, err := ch.SendStream("Который сейчас час? Используй инструмент get_current_time.", true)
+		ch := creative.NewChat(ai)
+		ch.SetTools(creative.BookTools())
+
+		resp, err := ch.SendStream("Перечисли все доступные книги, используя инструмент list_books.", true)
 		if err != nil {
 			t.Fatal(err)
 		}

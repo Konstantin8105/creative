@@ -7,29 +7,11 @@ import (
 	"github.com/Konstantin8105/creative"
 )
 
-func TestToolLookupAndExecute(t *testing.T) {
-	t.Run("not_found", func(t *testing.T) {
-		tools := creative.DefaultTools()
-		for _, tool := range tools {
-			if tool.Name == "nonexistent_tool" {
-				t.Fatal("unexpected match")
-			}
-		}
-	})
-
-	t.Run("found_and_execute", func(t *testing.T) {
-		tools := creative.DefaultTools()
-		for _, tool := range tools {
-			if tool.Name == "get_current_time" {
-				result := tool.Execute("")
-				if result == "" {
-					t.Error("expected non-empty result from get_current_time")
-				}
-				return
-			}
-		}
-		t.Fatal("get_current_time tool not found in DefaultTools")
-	})
+func TestDefaultToolsAreEmpty(t *testing.T) {
+	tools := creative.DefaultTools()
+	if len(tools) != 0 {
+		t.Errorf("DefaultTools should be empty, got %d tools", len(tools))
+	}
 }
 
 func TestToolParamsToString(t *testing.T) {
