@@ -574,8 +574,10 @@ body {
         body: new URLSearchParams({ session_id: sessionId, tab_id: tabId, message: text })
       });
 
-      if (response.status === 410) {
-        handleSessionExpired();
+	  if (response.status === 410) {
+		console.error('[410] session=%s tab=%s message=%s', sessionId, tabId, text);
+		renderedContentDiv.textContent = '⚠️ Сессия утеряна. Откройте новую вкладку.';{
+        // handleSessionExpired(); // no need
         tabs[tabId].isStreaming = false;
         setInputState(true);
         removeTypingIndicator(msgDiv);
@@ -618,8 +620,10 @@ body {
       }
     } catch (err) {
       renderedContentDiv.textContent = 'Network error: ' + err.message;
-    } finally {
-      tabs[tabId].isStreaming = false;
+	} finally {
+	  if (tabs[tabId]) {
+	     tabs[tabId].isStreaming = false;
+	  }
       setInputState(true);
       removeTypingIndicator(msgDiv);
       scrollToBottom(tabId);

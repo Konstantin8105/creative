@@ -180,7 +180,7 @@ func (sm *SessionManager) GetChat(sessionID, tabID string) (*creative.Chat, erro
 func (sm *SessionManager) CloseSession(sessionID string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-
+	log.Printf("[session] CloseSession: %s", sessionID)
 	delete(sm.sessions, sessionID)
 }
 

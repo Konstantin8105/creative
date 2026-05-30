@@ -55,6 +55,9 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		if strings.Contains(err.Error(), "session not found") {
 			status = http.StatusGone
 			msg = "Session expired. Please refresh the page to start a new session."
+			log.Printf("[410] session=%s tab=%s: %s", sessionID, tabID, err.Error())
+		} else {
+			log.Printf("[400] session=%s tab=%s: %s", sessionID, tabID, err.Error())
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
