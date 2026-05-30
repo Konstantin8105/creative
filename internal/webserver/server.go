@@ -10,8 +10,7 @@ import (
 
 // Start launches the web server and blocks until it exits.
 func Start(cfg *creative.Config, port string) {
-	configDir := cfg.ConfigDir()
-	sm := NewSessionManager(cfg, configDir, 1*time.Hour)
+	sm := NewSessionManager(cfg, 24*time.Hour)
 	defer sm.Stop()
 
 	mux := http.NewServeMux()

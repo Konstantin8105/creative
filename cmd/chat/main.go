@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -94,18 +93,13 @@ func main() {
 	}
 
 	// Resolve prompt (panics on error)
-	configDir := filepath.Dir(*configPath)
-	prompt := selectedMode.ResolvePrompt(configDir)
+	prompt := selectedMode.GetPrompt()
 
 	// Create AI provider
 	prvAI := creative.NewRouterAI(cfg.Provider)
 	ch := creative.NewChat(prvAI)
 	ch.AddSystem(prompt)
-	creative.BooksFolder = selectedMode.BooksFolder
-
-	if selectedMode.BooksFolder != "" {
-		ch.SetTools(creative.BookTools())
-	}
+	ch.SetTools(creative.BookTools(selectedMode.BooksFolder))
 
 	// Interactive chat loop
 	fmt.Printf("\n")
@@ -138,7 +132,7 @@ func main() {
 			ch = creative.NewChat(prvAI)
 			ch.AddSystem(prompt)
 			if selectedMode.BooksFolder != "" {
-				ch.SetTools(creative.BookTools())
+				ch.SetTools(creative.BookTools(selectedMode.BooksFolder))
 			}
 			fmt.Printf("%s--- Новый диалог ---%s\n\n", colorBold+colorCyan, colorReset)
 			continue

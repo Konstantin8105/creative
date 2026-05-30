@@ -36,22 +36,20 @@ type TabInfo struct {
 
 // SessionManager manages user sessions with multi-tab support and TTL-based cleanup.
 type SessionManager struct {
-	mu        sync.RWMutex
-	sessions  map[string]*Session
-	cfg       *creative.Config
-	configDir string
-	ttl       time.Duration
-	stopCh    chan struct{}
+	mu       sync.RWMutex
+	sessions map[string]*Session
+	cfg      *creative.Config
+	ttl      time.Duration
+	stopCh   chan struct{}
 }
 
 // NewSessionManager creates a new SessionManager.
-func NewSessionManager(cfg *creative.Config, configDir string, ttl time.Duration) *SessionManager {
+func NewSessionManager(cfg *creative.Config, ttl time.Duration) *SessionManager {
 	sm := &SessionManager{
-		sessions:  make(map[string]*Session),
-		cfg:       cfg,
-		configDir: configDir,
-		ttl:       ttl,
-		stopCh:    make(chan struct{}),
+		sessions: make(map[string]*Session),
+		cfg:      cfg,
+		ttl:      ttl,
+		stopCh:   make(chan struct{}),
 	}
 	go sm.cleanupLoop()
 	return sm
@@ -73,14 +71,12 @@ func (sm *SessionManager) CreateTab(sessionID, modeName string) (tabID string, e
 	}
 
 	// Resolve prompt and create chat (I/O — no lock needed)
-	prompt := modeCfg.ResolvePrompt(sm.configDir)
+	prompt := modeCfg.GetPrompt()
 	prvAI := creative.NewRouterAI(sm.cfg.Provider)
 	ch := creative.NewChat(prvAI)
 	ch.AddSystem(prompt)
 
-	if modeCfg.BooksFolder != "" {
-		ch.SetTools(creative.BookTools())
-	}
+	ch.SetTools(creative.BookTools(modeCfg.BooksFolder))
 
 	tabID = generateID()
 	tab := &Tab{
@@ -176,7 +172,6 @@ func (sm *SessionManager) GetChat(sessionID, tabID string) (*creative.Chat, erro
 	}
 
 	sess.LastActivity = time.Now()
-	creative.BooksFolder = tab.BooksFolder
 
 	return tab.Chat, nil
 }

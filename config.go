@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // ModeConfig represents a single chat mode with its label, prompt source, and books folder.
@@ -18,14 +17,8 @@ type ModeConfig struct {
 
 // Config is the top-level configuration loaded from a JSON file.
 type Config struct {
-	configDir string         // set by LoadConfig; used for relative path resolution
-	Provider   ProviderConfig `json:"provider"`
-	Modes      []ModeConfig   `json:"modes"`
-}
-
-// ConfigDir returns the directory containing the config file.
-func (c *Config) ConfigDir() string {
-	return c.configDir
+	Provider ProviderConfig `json:"provider"`
+	Modes    []ModeConfig   `json:"modes"`
 }
 
 // LoadConfig reads and parses a JSON configuration file from the given path.
@@ -42,8 +35,6 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
-	cfg.configDir = filepath.Dir(path)
-
 	if len(cfg.Modes) == 0 {
 		return nil, fmt.Errorf("config: at least one mode must be defined")
 	}
@@ -56,81 +47,47 @@ func LoadConfig(path string) (*Config, error) {
 		if m.Label == "" {
 			return nil, fmt.Errorf("config: mode %q: label is required", m.Name)
 		}
+		if m.BooksFolder == "" {
+			return nil, fmt.Errorf("config: mode %q: empty folder", m.Name)
+		}
+		if _, err := os.Stat(m.BooksFolder); os.IsNotExist(err) {
+			return nil, fmt.Errorf("config: mode %q: folder is not exist", m.Name)
+		}
+	}
+
+	// find prompt
+	for i, m := range cfg.Modes {
+		if m.PromptFile != "" {
+			path := m.PromptFile
+			_, err := os.ReadFile(path)
+			if err != nil {
+				panic(fmt.Errorf("mode `%s`: not found promt", m.Name))
+			}
+			continue
+		}
+		// search prompt
+		files, err := filepath.Glob(filepath.Join(m.BooksFolder, "*.promt"))
+		if err != nil {
+			panic(fmt.Errorf("find prompt: %v", err))
+		}
+		if len(files) != 1 {
+			panic(fmt.Errorf("find prompt: not valid amount prompts %d", len(files)))
+		}
+		path := files[0]
+		_, err = os.ReadFile(path)
+		if err != nil {
+			panic(fmt.Errorf("mode `%s`: not found promt", m.Name))
+		}
+		cfg.Modes[i].PromptFile = path
 	}
 
 	return &cfg, nil
 }
 
-// ResolvePrompt returns the system prompt content for this mode.
-// Panics on error — if a mode cannot resolve its prompt the program must not start.
-func (mc ModeConfig) ResolvePrompt(configDir string) string {
-	if mc.PromptFile != "" {
-		path := mc.PromptFile
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(configDir, path)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			panic(fmt.Sprintf("mode %q: reading prompt_file %q: %v", mc.Name, mc.PromptFile, err))
-		}
-		return string(data)
-	}
-
-	// No prompt_file — look for *.promt in books_folder
-	if mc.BooksFolder != "" {
-		return mc.resolvePromptFromFolder(configDir)
-	}
-
-	panic(fmt.Sprintf("mode %q: no prompt source — set prompt_file or books_folder", mc.Name))
-}
-
-// resolvePromptFromFolder looks for a single *.promt file in the books folder.
-func (mc ModeConfig) resolvePromptFromFolder(configDir string) string {
-	folder := mc.BooksFolder
-	if !filepath.IsAbs(folder) {
-		folder = filepath.Join(configDir, folder)
-	}
-
-	path, err := findPromptInFolder(folder)
+func (m ModeConfig) GetPrompt() string {
+	data, err := os.ReadFile(m.PromptFile)
 	if err != nil {
-		panic(fmt.Sprintf("mode %q: %v", mc.Name, err))
-	}
-	if path == "" {
-		panic(fmt.Sprintf("mode %q: no *.promt file found in books_folder %q", mc.Name, mc.BooksFolder))
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		panic(fmt.Sprintf("mode %q: reading %q: %v", mc.Name, path, err))
+		panic(fmt.Errorf("mode `%s`: not found promt", m.Name))
 	}
 	return string(data)
 }
-
-// findPromptInFolder searches for *.promt files in the given folder.
-// Returns the single matching file, or an error if zero or multiple are found.
-func findPromptInFolder(folder string) (string, error) {
-	entries, err := os.ReadDir(folder)
-	if err != nil {
-		return "", fmt.Errorf("reading books_folder %q: %w", folder, err)
-	}
-
-	var promtFiles []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if strings.HasSuffix(strings.ToLower(e.Name()), ".promt") {
-			promtFiles = append(promtFiles, filepath.Join(folder, e.Name()))
-		}
-	}
-
-	if len(promtFiles) == 0 {
-		return "", nil
-	}
-	if len(promtFiles) > 1 {
-		return "", fmt.Errorf("multiple *.promt files found in %q: %s", folder, strings.Join(promtFiles, ", "))
-	}
-	return promtFiles[0], nil
-}
-
-

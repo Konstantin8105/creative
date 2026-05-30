@@ -410,12 +410,10 @@ func TestLMStudio(t *testing.T) {
 	})
 
 	t.Run("ToolCall", func(t *testing.T) {
-		oldFolder := creative.BooksFolder
-		creative.BooksFolder = "testdata"
-		defer func() { creative.BooksFolder = oldFolder }()
+		folder := "testdata"
 
 		ch := creative.NewChat(ai)
-		ch.SetTools(creative.BookTools())
+		ch.SetTools(creative.BookTools(folder))
 
 		resp, err := ch.SendStream("Перечисли все доступные книги, используя инструмент list_books.", true)
 		if err != nil {
@@ -428,12 +426,10 @@ func TestLMStudio(t *testing.T) {
 	})
 
 	t.Run("BookTools", func(t *testing.T) {
-		oldFolder := creative.BooksFolder
-		creative.BooksFolder = "testdata"
-		defer func() { creative.BooksFolder = oldFolder }()
+		folder := "testdata"
 
 		ch := creative.NewChat(ai)
-		allTools := append(creative.DefaultTools(), creative.BookTools()...)
+		allTools := append(creative.DefaultTools(), creative.BookTools(folder)...)
 		ch.SetTools(allTools)
 
 		resp, err := ch.SendStream(`Выполни следующие действия:

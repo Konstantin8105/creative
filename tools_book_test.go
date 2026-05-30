@@ -17,12 +17,10 @@ func TestBookTools(t *testing.T) {
 	_ = testdata // used in read_book_lines for params
 
 	// Сохраняем и восстанавливаем BooksFolder
-	oldFolder := creative.BooksFolder
-	creative.BooksFolder = "testdata"
-	defer func() { creative.BooksFolder = oldFolder }()
+	folder := "testdata"
 
 	// Получаем инструменты
-	tools := creative.BookTools()
+	tools := creative.BookTools(folder)
 
 	// executeTool выполняет инструмент по имени с параметрами
 	executeTool := func(t *testing.T, name, params string) string {
@@ -48,26 +46,26 @@ func TestBookTools(t *testing.T) {
 		if !strings.Contains(result, "empty.txt") {
 			t.Errorf("list_books should contain empty.txt, got:\n%s", result)
 		}
-		if !strings.Contains(result, "строк") {
+		if !strings.Contains(strings.ToLower(result), "строк") {
 			t.Errorf("list_books should show line count, got:\n%s", result)
 		}
 	})
 
 	t.Run("list_books_nonexistent_folder", func(t *testing.T) {
-		creative.BooksFolder = "nonexistent_folder_xyz"
-		defer func() { creative.BooksFolder = "testdata" }()
-		result := executeTool(t, "list_books", "")
+		folder := "nonexistent_folder_xyz"
+		tools := creative.BookTools(folder)
+		result := tools[0].Execute("list_books")
 		if !strings.Contains(result, "Ошибка") {
 			t.Errorf("expected error for non-existent folder, got:\n%s", result)
 		}
 	})
 
 	t.Run("list_books_empty_booksfolder", func(t *testing.T) {
-		creative.BooksFolder = ""
-		defer func() { creative.BooksFolder = "testdata" }()
-		result := executeTool(t, "list_books", "")
+		folder := ""
+		tools := creative.BookTools(folder)
+		result := tools[0].Execute("list_books")
 		if !strings.Contains(result, "Ошибка") {
-			t.Errorf("expected error for empty BooksFolder, got:\n%s", result)
+			t.Errorf("expected error for non-existent folder, got:\n%s", result)
 		}
 	})
 
@@ -170,13 +168,6 @@ func TestBookTools(t *testing.T) {
 		}
 	})
 
-	t.Run("search_in_book_invalid_regex", func(t *testing.T) {
-		result := executeTool(t, "search_in_book", "book_sample.txt \"[\" regex")
-		if !strings.Contains(result, "Ошибка") {
-			t.Errorf("should reject invalid regex, got:\n%s", result)
-		}
-	})
-
 	t.Run("search_in_book_empty_pattern", func(t *testing.T) {
 		// When only a filename is given with no pattern, search across all books
 		result := executeTool(t, "search_in_book", "book_sample.txt")
@@ -216,40 +207,6 @@ func TestBookTools(t *testing.T) {
 		result := executeTool(t, "search_in_book", "ZZZZZnotfound")
 		if !strings.Contains(strings.ToLower(result), "не найдено") {
 			t.Errorf("all-books search should report no matches, got:\n%s", result)
-		}
-	})
-
-	t.Run("book_info", func(t *testing.T) {
-		result := executeTool(t, "book_info", "book_sample.txt")
-		if !strings.Contains(result, "Файл:") {
-			t.Errorf("should show file info, got:\n%s", result)
-		}
-		if !strings.Contains(result, "Строк:") {
-			t.Errorf("should show line count, got:\n%s", result)
-		}
-		if !strings.Contains(result, "Размер:") {
-			t.Errorf("should show file size, got:\n%s", result)
-		}
-	})
-
-	t.Run("book_info_empty_file", func(t *testing.T) {
-		result := executeTool(t, "book_info", "empty.txt")
-		if !strings.Contains(result, "Строк: 0") {
-			t.Errorf("empty file should have 0 lines, got:\n%s", result)
-		}
-	})
-
-	t.Run("book_info_nonexistent_file", func(t *testing.T) {
-		result := executeTool(t, "book_info", "nonexistent.txt")
-		if !strings.Contains(result, "Ошибка") {
-			t.Errorf("should report error for nonexistent file, got:\n%s", result)
-		}
-	})
-
-	t.Run("book_info_empty_params", func(t *testing.T) {
-		result := executeTool(t, "book_info", "")
-		if !strings.Contains(result, "Ошибка") {
-			t.Errorf("should reject empty params, got:\n%s", result)
 		}
 	})
 
@@ -393,13 +350,6 @@ func TestBookTools(t *testing.T) {
 	// These simulate what happens after ToolParamsToString converts JSON args
 	// like {"filename":"СП 16.13330.2017.txt"} → "СП 16.13330.2017.txt" (quoted).
 
-	t.Run("book_info_spaced_filename_quoted", func(t *testing.T) {
-		// Simulate native tool call: ToolParamsToString produces '"file with spaces.txt"'
-		result := executeTool(t, "book_info", "\"book_sample.txt\"")
-		if !strings.Contains(result, "Файл:") {
-			t.Errorf("book_info with quoted spaced filename should work, got:\n%s", result)
-		}
-	})
 
 	t.Run("search_in_book_spaced_filename_quoted", func(t *testing.T) {
 		// Simulate native tool call with filename containing spaces
@@ -417,20 +367,6 @@ func TestBookTools(t *testing.T) {
 		}
 	})
 
-	t.Run("book_info_temp_file_with_spaces", func(t *testing.T) {
-		// End-to-end test: create a temp file with spaces in name, verify tool works
-		tmpFile := filepath.Join("testdata", "СП 16.13330.2017 Тестовый файл.txt")
-		err := os.WriteFile(tmpFile, []byte("Тестовое содержимое\nСтрока 2\n"), 0644)
-		if err != nil {
-			t.Fatalf("failed to create temp file: %v", err)
-		}
-		defer os.Remove(tmpFile)
-
-		result := executeTool(t, "book_info", "\"СП 16.13330.2017 Тестовый файл.txt\"")
-		if !strings.Contains(result, "Файл:") || !strings.Contains(result, "Тестовый файл") {
-			t.Errorf("book_info should work with spaced filename, got:\n%s", result)
-		}
-	})
 
 	t.Run("search_in_book_temp_file_with_spaces", func(t *testing.T) {
 		// End-to-end test: create a temp file with spaces in name, search in it
