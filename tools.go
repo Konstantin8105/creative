@@ -105,5 +105,3 @@ func ToolsToOpenAI(tools []Tool) []map[string]interface{} {
 	}
 	return result
 }
-
-
