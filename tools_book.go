@@ -215,6 +215,7 @@ func listBooksTool(folder, params string) string {
 		fmt.Fprintf(&b, "Файл: \"%s\"\n", name)
 		fmt.Fprintf(&b, "Размер: %s (%d байт)\n", formatFileSize(fi.Size()), fi.Size())
 		fmt.Fprintf(&b, "Строк: %d\n", lines)
+		fmt.Fprintf(&b, "Время последнего изменения файла: %d\n", fi.ModTime().Format("2006-01-02 15:04:05"))
 		fmt.Fprintf(&b, "\n")
 	}
 	return b.String()
