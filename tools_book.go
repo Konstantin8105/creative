@@ -10,14 +10,9 @@ import (
 	"strings"
 )
 
-// BooksFolder — путь к папке с книгами.
-// Устанавливается один раз перед использованием BookTools.
-// Все инструменты работают только с файлами внутри этой папки.
-var BooksFolder string
-
 // BookTools возвращает набор инструментов для работы с книгами.
 // Перед использованием установите BooksFolder.
-func BookTools() []Tool {
+func BookTools(folder string) []Tool {
 	return []Tool{
 		{
 			Name:        "list_books",
@@ -27,7 +22,9 @@ func BookTools() []Tool {
 				Properties: map[string]ToolProperty{},
 				Required:   []string{},
 			},
-			Execute: listBooksTool,
+			Execute: func(params string) string {
+				return listBooksTool(folder, params)
+			},
 		},
 		{
 			Name:        "read_book_lines",
@@ -50,7 +47,9 @@ func BookTools() []Tool {
 				},
 				Required: []string{"filename", "start_line", "end_line"},
 			},
-			Execute: readBookLinesTool,
+			Execute: func(params string) string {
+				return readBookLinesTool(folder, params)
+			},
 		},
 		{
 			Name:        "search_in_book",
@@ -74,7 +73,9 @@ func BookTools() []Tool {
 				},
 				Required: []string{"pattern"},
 			},
-			Execute: searchInBookTool,
+			Execute: func(params string) string {
+				return searchInBookTool(folder, params)
+			},
 		},
 		{
 			Name:        "book_info",
@@ -89,7 +90,9 @@ func BookTools() []Tool {
 				},
 				Required: []string{"filename"},
 			},
-			Execute: bookInfoTool,
+			Execute: func(params string) string {
+				return bookInfoTool(folder, params)
+			},
 		},
 	}
 }
