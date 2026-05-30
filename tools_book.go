@@ -83,28 +83,16 @@ func BookTools(folder string) []Tool {
 // resolveFile проверяет, что файл существует, имеет расширение .txt/.md,
 // находится внутри folder, и возвращает полный путь.
 func resolveFile(folder, filename string) (fullPath string, errMsg string) {
-	if folder == "" {
-		return "", "Ошибка: не указана папка с книгами. Установите переменную folder"
-	}
-	if filename == "" {
-		return "", "Ошибка: не указано имя файла. Используйте list_books для просмотра доступных книг."
-	}
-	ext := strings.ToLower(filepath.Ext(filename))
-	if ext != ".txt" && ext != ".md" {
-		return "", fmt.Sprintf("Ошибка: файл %q имеет расширение %s. Поддерживаются только файлы .txt и .md.", filename, ext)
-	}
-	fullPath = filepath.Clean(filepath.Join(folder, filename))
-	info, err := os.Stat(fullPath)
+	files, err := getFiles(folder)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Sprintf("Ошибка: файл %q не найден. Используйте list_books для просмотра доступных книг.", filename)
+		return "", err.Error()
+	}
+	for _, file := range files {
+		if file == filename {
+			return filepath.Clean(filepath.Join(folder, filename)), ""
 		}
-		return "", fmt.Sprintf("Ошибка: не удалось получить информацию о файле %q: %v", filename, err)
 	}
-	if info.IsDir() {
-		return "", fmt.Sprintf("Ошибка: %q является папкой, а не файлом.", filename)
-	}
-	return fullPath, ""
+	return "", fmt.Sprintf("Ошибка: файл %q не найден. Используйте list_books для просмотра доступных книг.", filename)
 }
 
 func formatFileSize(bytes int64) string {
@@ -118,7 +106,7 @@ func formatFileSize(bytes int64) string {
 	}
 }
 
-// TODO add tests
+// getFiles return all acceptable files
 func getFiles(folder string) (files []string, err error) {
 	if folder == "" {
 		err = fmt.Errorf("Ошибка: не указана папка с книгами. Установите переменную folder")
@@ -150,44 +138,18 @@ func getFiles(folder string) (files []string, err error) {
 		files = append(files, entry.Name())
 	}
 	if len(files) == 0 {
-		err = fmt.Errorf("В папке не найдено книг в формате .txt или .md.")
+		err = fmt.Errorf("В папке не найдено книг.")
 		return
 	}
 	return
 }
 
 func listBooksTool(folder, params string) string {
-	if folder == "" {
-		return "Ошибка: не указана папка с книгами. Установите переменную folder"
-	}
-	info, err := os.Stat(folder)
+	files, err := getFiles(folder)
 	if err != nil {
-		return fmt.Sprintf("Ошибка: папка %q не найдена.", folder)
-	}
-	if !info.IsDir() {
-		return fmt.Sprintf("Ошибка: %q не является папкой.", folder)
+		return err.Error()
 	}
 
-	entries, err := os.ReadDir(folder)
-	if err != nil {
-		return fmt.Sprintf("Ошибка при чтении папки: %v", err)
-	}
-
-	var files []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".txt" && ext != ".md" {
-			continue
-		}
-		files = append(files, entry.Name())
-	}
-
-	if len(files) == 0 {
-		return fmt.Sprintf("В папке не найдено книг в формате .txt или .md.")
-	}
 	countLines := func(path string) int {
 		f, err := os.Open(path)
 		if err != nil {
@@ -215,7 +177,7 @@ func listBooksTool(folder, params string) string {
 		fmt.Fprintf(&b, "Файл: \"%s\"\n", name)
 		fmt.Fprintf(&b, "Размер: %s (%d байт)\n", formatFileSize(fi.Size()), fi.Size())
 		fmt.Fprintf(&b, "Строк: %d\n", lines)
-		fmt.Fprintf(&b, "Время последнего изменения файла: %d\n", fi.ModTime().Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(&b, "Время последнего изменения файла: %s\n", fi.ModTime().Format("2006-01-02 15:04:05"))
 		fmt.Fprintf(&b, "\n")
 	}
 	return b.String()
@@ -307,6 +269,7 @@ func searchInBookTool(folder, params string) string {
 	if params == "" {
 		return "Ошибка: не указаны параметры. Используйте: search_in_book \"имя_файла\" \"паттерн\" [режим]"
 	}
+	// example for full search: "гипноз|hypnosis|гипно"
 
 	// If params starts with a quote, it's a quoted filename
 	if strings.HasPrefix(params, "\"") {
@@ -345,9 +308,22 @@ func searchInBookTool(folder, params string) string {
 		return "Ошибка: не указаны параметры. Используйте: search_in_book имя_файла \"паттерн\""
 	}
 
+	files, err := getFiles(folder)
+	if err != nil {
+		return err.Error()
+	}
+
+	// single search
+	singleSearch := false
+	for _, file := range files {
+		if file != parts[0] {
+			singleSearch = true
+			break
+		}
+	}
+
 	// Check if first part looks like a filename (.txt/.md extension)
-	firstExt := strings.ToLower(filepath.Ext(parts[0]))
-	if firstExt == ".txt" || firstExt == ".md" {
+	if singleSearch {
 		if len(parts) < 2 {
 			// Just a filename, no pattern — treat as all-books search with filename as pattern
 			return searchAllBooksTool(folder, params)
@@ -367,31 +343,9 @@ func searchInBookTool(folder, params string) string {
 }
 
 func searchAllBooksTool(folder, params string) string {
-	if folder == "" {
-		return "Ошибка: не указана папка с книгами."
-	}
-
-	entries, err := os.ReadDir(folder)
+	files, err := getFiles(folder)
 	if err != nil {
-		return fmt.Sprintf("Ошибка при чтении папки книг: %v", err)
-	}
-
-	// Collect all .txt/.md files
-	var bookFiles []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".txt" && ext != ".md" {
-			continue
-		}
-		bookFiles = append(bookFiles, entry.Name())
-	}
-	sort.Strings(bookFiles)
-
-	if len(bookFiles) == 0 {
-		return "В папке не найдено книг в формате .txt или .md."
+		return err.Error()
 	}
 
 	// Parse the pattern and mode from params
@@ -401,7 +355,7 @@ func searchAllBooksTool(folder, params string) string {
 	}
 
 	var results []string
-	for _, filename := range bookFiles {
+	for _, filename := range files {
 		fullPath := filepath.Join(folder, filename)
 		res := runSearch(fullPath, filename, pattern, mode)
 

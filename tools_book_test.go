@@ -133,7 +133,7 @@ func TestBookTools(t *testing.T) {
 
 	t.Run("read_book_lines_bad_extension", func(t *testing.T) {
 		result := executeTool(t, "read_book_lines", "book_sample.go 1 5")
-		if !strings.Contains(result, "Поддерживаются только файлы") {
+		if !strings.Contains(result, "list_books") {
 			t.Errorf("should reject .go extension, got:\n%s", result)
 		}
 	})

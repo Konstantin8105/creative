@@ -367,9 +367,6 @@ body {
     input.style.height = Math.min(input.scrollHeight, 400) + 'px';
   });
   sendBtn.addEventListener('click', sendMessage);
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
-  });
 
   // ─── Load config ───
   fetch('/api/config')
