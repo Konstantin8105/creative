@@ -576,8 +576,7 @@ body {
 
 	  if (response.status === 410) {
 		console.error('[410] session=%s tab=%s message=%s', sessionId, tabId, text);
-		renderedContentDiv.textContent = '⚠️ Сессия утеряна. Откройте новую вкладку.';{
-        // handleSessionExpired(); // no need
+		renderedContentDiv.textContent = '⚠️ Сессия утеряна. Откройте новую вкладку.';
         tabs[tabId].isStreaming = false;
         setInputState(true);
         removeTypingIndicator(msgDiv);
