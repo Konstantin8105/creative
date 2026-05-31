@@ -10,7 +10,7 @@ import (
 	"github.com/Konstantin8105/creative"
 )
 
-func newTestConfig(t *testing.T) (*creative.Config, string) {
+func newTestConfig(t *testing.T) *creative.Config {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -49,12 +49,12 @@ func newTestConfig(t *testing.T) (*creative.Config, string) {
 		t.Fatal(err)
 	}
 
-	return cfg, dir
+	return cfg
 }
 
 func TestNewSessionManager(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	if sm == nil {
 		t.Fatal("NewSessionManager returned nil")
 	}
@@ -62,8 +62,8 @@ func TestNewSessionManager(t *testing.T) {
 }
 
 func TestTabCreateAndList(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	// Create tabs in different sessions
@@ -110,8 +110,8 @@ func TestTabCreateAndList(t *testing.T) {
 }
 
 func TestListTabs_SessionNotFound(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	_, err := sm.ListTabs("nonexistent")
@@ -121,8 +121,8 @@ func TestListTabs_SessionNotFound(t *testing.T) {
 }
 
 func TestCreateTab(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	tabID, err := sm.CreateTab("session_a", "test")
@@ -147,8 +147,8 @@ func TestCreateTab(t *testing.T) {
 }
 
 func TestCreateTab_UnknownMode(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	_, err := sm.CreateTab("session_b", "nonexistent")
@@ -158,8 +158,8 @@ func TestCreateTab_UnknownMode(t *testing.T) {
 }
 
 func TestCloseTab(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	tabID, err := sm.CreateTab("session_c", "test")
@@ -180,8 +180,8 @@ func TestCloseTab(t *testing.T) {
 }
 
 func TestCloseTab_NotFound(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	if err := sm.CloseTab("nonexistent", "tab_x"); err == nil {
@@ -190,8 +190,8 @@ func TestCloseTab_NotFound(t *testing.T) {
 }
 
 func TestGetChat(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	tabID, err := sm.CreateTab("session_d", "test")
@@ -209,8 +209,8 @@ func TestGetChat(t *testing.T) {
 }
 
 func TestGetChat_SessionNotFound(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	_, err := sm.GetChat("nonexistent", "tab_x")
@@ -220,8 +220,8 @@ func TestGetChat_SessionNotFound(t *testing.T) {
 }
 
 func TestHeartbeat(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	// Create a tab to establish session
@@ -244,8 +244,8 @@ func TestHeartbeat(t *testing.T) {
 }
 
 func TestCloseSession(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	// Create a tab to establish session
@@ -264,8 +264,8 @@ func TestCloseSession(t *testing.T) {
 }
 
 func TestConcurrentTabs(t *testing.T) {
-	cfg, dir := newTestConfig(t)
-	sm := NewSessionManager(cfg, dir, 1*time.Hour)
+	cfg := newTestConfig(t)
+	sm := NewSessionManager(cfg, 1*time.Hour)
 	defer sm.Stop()
 
 	const n = 20
