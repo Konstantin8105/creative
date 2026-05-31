@@ -114,8 +114,8 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		},
 		OnToolResult: func(name, result string) {
 			preview := result
-			if len(preview) > 200 {
-				preview = preview[:200] + "..."
+			if len(preview) > 400 {
+				preview = preview[:400] + "..."
 			}
 			data, _ := json.Marshal(map[string]string{"name": name, "result": preview})
 			sseEvent(w, flusher, "tool_result", string(data))

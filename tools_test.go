@@ -1,7 +1,6 @@
 package creative_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Konstantin8105/creative"
@@ -12,116 +11,6 @@ func TestDefaultToolsAreEmpty(t *testing.T) {
 	if len(tools) != 0 {
 		t.Errorf("DefaultTools should be empty, got %d tools", len(tools))
 	}
-}
-
-func TestToolParamsToString(t *testing.T) {
-	t.Run("nil_parameters_json_object", func(t *testing.T) {
-		// Tool with no Parameters schema — should extract values from JSON
-		tool := creative.Tool{Name: "test", Parameters: nil}
-		result := creative.ToolParamsToString(tool, `{"a":"hello","b":"world"}`)
-		// Order is non-deterministic for map, but both values should appear
-		if !strings.Contains(result, "hello") || !strings.Contains(result, "world") {
-			t.Errorf("expected both values, got %q", result)
-		}
-	})
-
-	t.Run("nil_parameters_non_json", func(t *testing.T) {
-		// Tool with no Parameters, non-JSON input — should return as-is
-		tool := creative.Tool{Name: "test", Parameters: nil}
-		result := creative.ToolParamsToString(tool, "simple string")
-		if result != "simple string" {
-			t.Errorf("got %q, want %q", result, "simple string")
-		}
-	})
-
-	t.Run("nil_parameters_invalid_json", func(t *testing.T) {
-		// Invalid JSON should be returned as-is
-		tool := creative.Tool{Name: "test", Parameters: nil}
-		result := creative.ToolParamsToString(tool, "{invalid}")
-		if result != "{invalid}" {
-			t.Errorf("got %q, want %q", result, "{invalid}")
-		}
-	})
-
-	t.Run("with_parameters_ordered", func(t *testing.T) {
-		tool := creative.Tool{
-			Name: "test",
-			Parameters: &creative.ToolParameters{
-				Type:       "object",
-				Properties: map[string]creative.ToolProperty{},
-				Required:   []string{"first", "second"},
-			},
-		}
-		result := creative.ToolParamsToString(tool, `{"second":"world","first":"hello"}`)
-		expected := "hello world"
-		if result != expected {
-			t.Errorf("got %q, want %q (ordered by Required)", result, expected)
-		}
-	})
-
-	t.Run("with_parameters_order_missing", func(t *testing.T) {
-		tool := creative.Tool{
-			Name: "test",
-			Parameters: &creative.ToolParameters{
-				Type:       "object",
-				Properties: map[string]creative.ToolProperty{},
-				Required:   []string{"first", "second"},
-			},
-		}
-		result := creative.ToolParamsToString(tool, `{"first":"hello"}`)
-		expected := "hello"
-		if result != expected {
-			t.Errorf("got %q, want %q", result, expected)
-		}
-	})
-
-	t.Run("with_parameters_value_containing_spaces", func(t *testing.T) {
-		tool := creative.Tool{
-			Name: "test",
-			Parameters: &creative.ToolParameters{
-				Type:       "object",
-				Properties: map[string]creative.ToolProperty{},
-				Required:   []string{"filename"},
-			},
-		}
-		result := creative.ToolParamsToString(tool, `{"filename":"СП 16.13330.2017.txt"}`)
-		// Should be quoted because it doesn't contain spaces
-		expected := `"СП 16.13330.2017.txt"`
-		if result != expected {
-			t.Errorf("got %q, want %q", result, expected)
-		}
-	})
-
-	t.Run("with_parameters_invalid_json", func(t *testing.T) {
-		tool := creative.Tool{
-			Name: "test",
-			Parameters: &creative.ToolParameters{
-				Type:       "object",
-				Properties: map[string]creative.ToolProperty{},
-				Required:   []string{"first"},
-			},
-		}
-		result := creative.ToolParamsToString(tool, "{invalid}")
-		if result != "{invalid}" {
-			t.Errorf("got %q, want %q (fallback)", result, "{invalid}")
-		}
-	})
-
-	t.Run("with_parameters_no_required", func(t *testing.T) {
-		tool := creative.Tool{
-			Name: "test",
-			Parameters: &creative.ToolParameters{
-				Type:       "object",
-				Properties: map[string]creative.ToolProperty{},
-				Required:   []string{},
-			},
-		}
-		result := creative.ToolParamsToString(tool, `{"key":"val"}`)
-		// No required fields — should return raw JSON
-		if result != `{"key":"val"}` {
-			t.Errorf("got %q, want %q", result, `{"key":"val"}`)
-		}
-	})
 }
 
 func TestToOpenAITool(t *testing.T) {

@@ -349,14 +349,13 @@ func (ch *Chat) processToolCalls(isChat bool) (_ string, err error) {
 				})
 				continue
 			}
-			params := ToolParamsToString(tool, tc.Function.Arguments)
 
 			// Fire OnToolCall callback
 			if ch.callback != nil && ch.callback.OnToolCall != nil {
 				ch.callback.OnToolCall(tool.Name, tc.Function.Arguments)
 			}
 
-			result := tool.Execute(params)
+			result := tool.Execute(tc.Function.Arguments)
 
 			// Fire OnToolResult callback
 			if ch.callback != nil && ch.callback.OnToolResult != nil {

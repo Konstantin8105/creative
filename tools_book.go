@@ -2,7 +2,9 @@ package creative
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -184,81 +186,67 @@ func listBooksTool(folder, params string) string {
 }
 
 func readBookLinesTool(folder string, params string) string {
-	parts := strings.Fields(params)
-	if len(parts) < 3 {
+	params = strings.TrimSpace(params)
+	if params == "" {
 		return "Ошибка: недостаточно параметров. Используйте: read_book_lines имя_файла начальная_строка конечная_строка"
 	}
 
-	var filename string
-	if strings.HasPrefix(params, "\"") {
-		endQuote := strings.Index(params[1:], "\"")
-		if endQuote < 0 {
-			return "Ошибка: неверный формат. Используйте: read_book_lines \"имя файла.txt\" 1 50"
-		}
-		filename = params[1 : endQuote+1]
-		remaining := strings.TrimSpace(params[endQuote+2:])
-		parts = strings.Fields(remaining)
-		if len(parts) < 2 {
-			return "Ошибка: недостаточно параметров. Укажите начальную и конечную строку."
-		}
-	} else {
-		filename = parts[0]
-		parts = parts[1:]
+	data := struct {
+		Filename string `json:"filename"`
+		Start    int    `json:"start_line"`
+		End      int    `json:"end_line"`
+	}{}
+
+	if err := json.Unmarshal([]byte(params), &data); err != nil {
+		log.Printf("readBookLinesTool: not valid JSON: `%s`", params)
+		return fmt.Sprintf("Ошибка: не корректной формат JSON для выходных данных: %v", err)
 	}
 
-	if len(parts) < 2 {
-		return "Ошибка: недостаточно параметров. Укажите начальную и конечную строку."
+	data.Filename = strings.TrimSpace(data.Filename)
+
+	if data.Filename == "" {
+		return "Ошибка: неверный формат. Используйте: read_book_lines \"имя файла.txt\" 1 50"
+	}
+	if data.Start < 1 {
+		return "Ошибка: номер строки должен быть >= 1."
+	}
+	if data.Start > data.End {
+		return "Ошибка: начальная строка больше конечной."
+	}
+	if data.End-data.Start > 1000 {
+		return "Ошибка: слишком большой диапазон (максимум 1000 строк за вызов)."
 	}
 
-	var startLine, endLine int
-	_, err := fmt.Sscanf(parts[0], "%d", &startLine)
-	if err != nil {
-		return fmt.Sprintf("Ошибка: начальная строка должна быть числом, получено %q.", parts[0])
-	}
-	_, err = fmt.Sscanf(parts[1], "%d", &endLine)
-	if err != nil {
-		return fmt.Sprintf("Ошибка: конечная строка должна быть числом, получено %q.", parts[1])
-	}
-
-	fullPath, errMsg := resolveFile(folder, filename)
+	fullPath, errMsg := resolveFile(folder, data.Filename)
 	if errMsg != "" {
 		return errMsg
 	}
 
-	if startLine < 1 {
-		return "Ошибка: номер строки должен быть >= 1."
-	}
-	if startLine > endLine {
-		return "Ошибка: начальная строка больше конечной."
-	}
-	if endLine-startLine > 1000 {
-		return "Ошибка: слишком большой диапазон (максимум 1000 строк за вызов)."
-	}
-
 	f, err := os.Open(fullPath)
 	if err != nil {
-		return fmt.Sprintf("Ошибка: не удалось открыть файл %q.", filename)
+		return fmt.Sprintf("Ошибка: не удалось открыть файл %q.", data.Filename)
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	currentLine := 1
 	var b strings.Builder
-	fmt.Fprintf(&b, "--- Строки %d-%d из %q ---\n", startLine, endLine, filename)
+	fmt.Fprintf(&b, "--- Строки %d-%d из %q ---\n", data.Start, data.End, data.Filename)
 
 	for scanner.Scan() {
-		if currentLine > endLine {
+		if currentLine > data.End {
 			break
 		}
-		if currentLine >= startLine {
+		if currentLine >= data.Start {
 			fmt.Fprintf(&b, "%d: %s\n", currentLine, scanner.Text())
 		}
 		currentLine++
 	}
 
-	if currentLine <= startLine {
+	if currentLine <= data.Start {
 		totalLines := currentLine - 1
-		return fmt.Sprintf("Файл %q содержит только %d строк. Запрошен диапазон %d-%d.", filename, totalLines, startLine, endLine)
+		return fmt.Sprintf("Файл %q содержит только %d строк. Запрошен диапазон %d-%d.",
+			data.Filename, totalLines, data.Start, data.End)
 	}
 
 	return b.String()
@@ -269,43 +257,21 @@ func searchInBookTool(folder, params string) string {
 	if params == "" {
 		return "Ошибка: не указаны параметры. Используйте: search_in_book \"имя_файла\" \"паттерн\" [режим]"
 	}
-	// example for full search: "гипноз|hypnosis|гипно"
 
-	// If params starts with a quote, it's a quoted filename
-	if strings.HasPrefix(params, "\"") {
-		endQuote := strings.Index(params[1:], "\"")
-		if endQuote < 0 {
-			return "Ошибка: неверный формат. Используйте: search_in_book \"имя файла.txt\" \"паттерн\" [режим]"
-		}
-		filename := params[1 : endQuote+1]
-		remaining := strings.TrimSpace(params[endQuote+2:])
-		if remaining == "" {
-			return "Ошибка: не указан паттерн для поиска."
-		}
-		if strings.HasPrefix(remaining, "\"") {
-			endQuote2 := strings.Index(remaining[1:], "\"")
-			if endQuote2 < 0 {
-				return "Ошибка: неверный формат паттерна."
-			}
-			pattern := remaining[1 : endQuote2+1]
-			fullPath, errMsg := resolveFile(folder, filename)
-			if errMsg != "" {
-				return errMsg
-			}
-			mode := strings.TrimSpace(remaining[endQuote2+2:])
-			return runSearch(fullPath, filename, pattern, mode)
-		}
-		mode, pattern := splitLastMode(remaining)
-		fullPath, errMsg := resolveFile(folder, filename)
-		if errMsg != "" {
-			return searchAllBooksTool(folder, remaining)
-		}
-		return runSearch(fullPath, filename, pattern, mode)
+	data := struct {
+		Filename string `json:"filename"`
+		Pattern  string `json:"pattern"`
+		Mode     string `json:"mode"`
+	}{}
+
+	if err := json.Unmarshal([]byte(params), &data); err != nil {
+		log.Printf("searchInBookTool: not valid JSON: `%s`", params)
+		return fmt.Sprintf("Ошибка: не корректной формат JSON для выходных данных: %v", err)
 	}
 
-	parts := strings.Fields(params)
-	if len(parts) == 0 {
-		return "Ошибка: не указаны параметры. Используйте: search_in_book имя_файла \"паттерн\""
+	data.Pattern = strings.TrimSpace(data.Pattern)
+	if data.Pattern == "" {
+		return "Ошибка: не указан паттерн. Используйте: search_in_book \"имя_файла\" \"паттерн\" [режим]"
 	}
 
 	files, err := getFiles(folder)
@@ -314,64 +280,27 @@ func searchInBookTool(folder, params string) string {
 	}
 
 	// single search
-	singleSearch := false
 	for _, file := range files {
-		if file != parts[0] {
-			singleSearch = true
-			break
+		if file != data.Filename {
+			continue
 		}
-	}
-
-	// Check if first part looks like a filename (.txt/.md extension)
-	if singleSearch {
-		if len(parts) < 2 {
-			// Just a filename, no pattern — treat as all-books search with filename as pattern
-			return searchAllBooksTool(folder, params)
+		fullPath, errMsg := resolveFile(folder, file)
+		if errMsg != "" {
+			return errMsg
 		}
-		filename := parts[0]
-		remaining := strings.Join(parts[1:], " ")
-		mode, pattern := splitLastMode(remaining)
-		fullPath, errMsg := resolveFile(folder, filename)
-		if errMsg == "" {
-			return runSearch(fullPath, filename, pattern, mode)
+		return runSearch(fullPath, data.Filename, data.Pattern, data.Mode)
+	}
+	// search in all files
+	var buf strings.Builder
+	for _, file := range files {
+		fullPath, errMsg := resolveFile(folder, file)
+		if errMsg != "" {
+			continue
 		}
-		// Filename didn't resolve — treat entire params as pattern for all-books search
+		result := runSearch(fullPath, file, data.Pattern, data.Mode)
+		fmt.Fprintf(&buf, "%s\n", result)
 	}
-
-	// No valid filename — search across all books
-	return searchAllBooksTool(folder, params)
-}
-
-func searchAllBooksTool(folder, params string) string {
-	files, err := getFiles(folder)
-	if err != nil {
-		return err.Error()
-	}
-
-	// Parse the pattern and mode from params
-	mode, pattern := splitLastMode(params)
-	if pattern == "" {
-		return "Ошибка: не указан паттерн для поиска."
-	}
-
-	var results []string
-	for _, filename := range files {
-		fullPath := filepath.Join(folder, filename)
-		res := runSearch(fullPath, filename, pattern, mode)
-
-		// If file has matches, prefix each line with book name
-		if strings.Contains(res, "Найдено") {
-			// Modify the result to include book name header
-			// The result format from runSearch already includes the filename in the header
-			results = append(results, res)
-		}
-	}
-
-	if len(results) == 0 {
-		return fmt.Sprintf("Не найдено совпадений с %q ни в одной книге.", pattern)
-	}
-
-	return strings.Join(results, "\n\n")
+	return buf.String()
 }
 
 func splitLastMode(s string) (mode, pattern string) {

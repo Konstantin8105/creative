@@ -1,0 +1,17 @@
+{"pattern": "НЛП это|NLP это"}
+{"pattern": "НЛП это|НЛП — это", "mode": "keyword"}
+{"pattern": "НЛП это|нейро-лингвистическое", "mode": "keyword"}
+{"pattern": "НЛП это", "mode": "regex"}
+{"mode": "regex", "pattern": "НЛП[ \\-–—]*(это|—|-)"}
+{"pattern": "НЛП это", "mode": "keyword"}
+{"pattern": "НЛП", "mode": "keyword"}
+{"pattern": "хронология|история|хроник|chronolog|history|timeline"}
+{"pattern": "основан|создан|разработан|1970|1975|1980|1990|2000"}
+{"pattern": "НЛП|NLP|нейролингвистическое программирование|neuro-linguistic", "filename": "co.md"}
+{"pattern": "Раздел I|Глава 1|Статья 1", "filename": "Ко.txt", "mode": "keyword"}
+{"pattern": "Раздел|Глава|Статья", "filename": "Ко.txt", "mode": "regex"}
+{"pattern": "Раздел|Глава|Статья", "filename": "Ко.txt", "mode": "regex"}
+{"pattern": "символизм|символическ|symbolism|symbolic"}
+{"filename": "СП.txt", "pattern": "расчет|расчёт|прочность|нагрузк"}
+{"filename": "AS.txt", "pattern": "stack|design|load|wind"}
+{"filename": "04.txt", "pattern": "scope|field|design|load|vortex"}

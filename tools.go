@@ -1,11 +1,5 @@
 package creative
 
-import (
-	"encoding/json"
-	"fmt"
-	"strings"
-)
-
 // ToolParameters defines JSON Schema for native tool parameters.
 // When non-nil, the tool definition is sent to AI in native OpenAI format.
 type ToolParameters struct {
@@ -32,50 +26,6 @@ type Tool struct {
 // DefaultTools returns the default set of tools available to agents.
 func DefaultTools() []Tool {
 	return []Tool{}
-}
-
-// ToolParamsToString converts JSON arguments from native tool_calls
-// to a space-separated string for legacy Execute functions.
-// Preserves the Required fields order from Parameters schema.
-func ToolParamsToString(tool Tool, jsonArgs string) string {
-	if tool.Parameters == nil {
-		// For tools with no schema, pass the JSON as-is (simple tools like get_current_time)
-		// or try to strip JSON wrapping if it looks like {"key":"val"}
-		var m map[string]interface{}
-		if err := json.Unmarshal([]byte(jsonArgs), &m); err != nil {
-			return jsonArgs
-		}
-		// No schema, but we got a JSON object — extract values in key order
-		var parts []string
-		for k, v := range m {
-			_ = k
-			parts = append(parts, fmt.Sprintf("%v", v))
-		}
-		return strings.Join(parts, " ")
-	}
-
-	var args map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonArgs), &args); err != nil {
-		return jsonArgs // fallback
-	}
-
-	var parts []string
-	// Use Required order for deterministic output
-	for _, key := range tool.Parameters.Required {
-		if val, ok := args[key]; ok {
-			strVal := fmt.Sprintf("%v", val)
-			// Wrap values containing spaces in quotes so downstream parsing
-			// (strings.Fields) preserves them as a single token.
-			if strings.Contains(strVal, " ") {
-				strVal = `"` + strVal + `"`
-			}
-			parts = append(parts, strVal)
-		}
-	}
-	if len(parts) > 0 {
-		return strings.Join(parts, " ")
-	}
-	return jsonArgs
 }
 
 // ToOpenAITool converts a Tool to the OpenAI tools API format.
