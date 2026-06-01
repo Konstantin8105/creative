@@ -152,18 +152,13 @@ func listBooksTool(folder, params string) string {
 		return err.Error()
 	}
 
-	countLines := func(path string) int {
-		f, err := os.Open(path)
+	countLines := func(path string) string {
+		data, err := os.ReadFile(path)
 		if err != nil {
-			return 0
+			return err.Error()
 		}
-		defer f.Close()
-		scanner := bufio.NewScanner(f)
-		lines := 0
-		for scanner.Scan() {
-			lines++
-		}
-		return lines
+		lines := strings.Split(string(data), "\n")
+		return fmt.Sprintf("%d", len(lines))
 	}
 
 	sort.Strings(files)
@@ -178,7 +173,7 @@ func listBooksTool(folder, params string) string {
 		lines := countLines(fullPath)
 		fmt.Fprintf(&b, "Файл: \"%s\"\n", name)
 		fmt.Fprintf(&b, "Размер: %s (%d байт)\n", formatFileSize(fi.Size()), fi.Size())
-		fmt.Fprintf(&b, "Строк: %d\n", lines)
+		fmt.Fprintf(&b, "Строк: %s\n", lines)
 		fmt.Fprintf(&b, "Время последнего изменения файла: %s\n", fi.ModTime().Format("2006-01-02 15:04:05"))
 		fmt.Fprintf(&b, "\n")
 	}
@@ -210,7 +205,7 @@ func readBookLinesTool(folder string, params string) string {
 	if data.Start < 1 {
 		return "Ошибка: номер строки должен быть >= 1."
 	}
-	if data.Start > data.End {
+	if data.End < data.Start {
 		return "Ошибка: начальная строка больше конечной."
 	}
 	if data.End-data.Start > 1000 {
@@ -222,33 +217,16 @@ func readBookLinesTool(folder string, params string) string {
 		return errMsg
 	}
 
-	f, err := os.Open(fullPath)
+	dataFile, err := os.ReadFile(fullPath)
 	if err != nil {
-		return fmt.Sprintf("Ошибка: не удалось открыть файл %q.", data.Filename)
+		return err.Error()
 	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	currentLine := 1
+	lines := strings.Split(string(dataFile), "\n")
 	var b strings.Builder
 	fmt.Fprintf(&b, "--- Строки %d-%d из %q ---\n", data.Start, data.End, data.Filename)
-
-	for scanner.Scan() {
-		if currentLine > data.End {
-			break
-		}
-		if currentLine >= data.Start {
-			fmt.Fprintf(&b, "%d: %s\n", currentLine, scanner.Text())
-		}
-		currentLine++
+	for pos := data.Start - 1; pos <= data.End-1 && pos < len(lines); pos++ {
+		fmt.Fprintf(&b, "%d: %s\n", pos+1, lines[pos])
 	}
-
-	if currentLine <= data.Start {
-		totalLines := currentLine - 1
-		return fmt.Sprintf("Файл %q содержит только %d строк. Запрошен диапазон %d-%d.",
-			data.Filename, totalLines, data.Start, data.End)
-	}
-
 	return b.String()
 }
 

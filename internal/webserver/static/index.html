@@ -661,7 +661,7 @@ body {
         const targs = data.args || '';
         const tnotice = document.createElement('div');
         tnotice.className = 'tool-notice';
-        tnotice.innerHTML = '<span class="icon">🔧</span><span>Tool: <span class="name">' + escapeHtml(tname) + '</span>(<span class="result-preview">' + escapeHtml(truncate(targs, 80)) + '</span>)</span>';
+        tnotice.innerHTML = '<span class="icon">🔧</span><span>Tool: <span class="name">' + escapeHtml(tname) + '</span>(<span class="result-preview">' + escapeHtml(truncate(targs)) + '</span>)</span>';
         bubble.querySelector('.tools-container').appendChild(tnotice);
         scrollToBottom(tabId);
         break;
@@ -671,7 +671,7 @@ body {
         const result = data.result || '';
         const rnotice = document.createElement('div');
         rnotice.className = 'tool-notice';
-        rnotice.innerHTML = '<span class="icon">✅</span><span><span class="name">' + escapeHtml(rname) + '</span> → <span class="result-preview">' + escapeHtml(truncate(result, 120)) + '</span></span>';
+        rnotice.innerHTML = '<span class="icon">✅</span><span><span class="name">' + escapeHtml(rname) + '</span> → <span class="result-preview">' + escapeHtml(truncate(result)) + '</span></span>';
         bubble.querySelector('.tools-container').appendChild(rnotice);
         scrollToBottom(tabId);
         break;
@@ -786,7 +786,8 @@ body {
     return div.innerHTML;
   }
 
-  function truncate(str, maxLen) {
+  function truncate(str) {
+    maxLen = 500;
     if (!str) return '';
     return str.length > maxLen ? str.slice(0, maxLen) + '...' : str;
   }
