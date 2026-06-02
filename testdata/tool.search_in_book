@@ -15,3 +15,4 @@
 {"filename": "СП.txt", "pattern": "расчет|расчёт|прочность|нагрузк"}
 {"filename": "AS.txt", "pattern": "stack|design|load|wind"}
 {"filename": "04.txt", "pattern": "scope|field|design|load|vortex"}
+{"pattern": "A7|формат бумаги|формат книги|книжный формат|ISO 216", "mode":
