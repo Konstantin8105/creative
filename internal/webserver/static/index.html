@@ -755,9 +755,15 @@ body {
   }
 
   function setInputState(enabled) {
-    input.disabled = !enabled;
-    sendBtn.disabled = !enabled;
-    if (enabled) input.focus();
+    // input.disabled = !enabled;
+    if (enabled) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = '>>';
+        input.focus();
+    } else {
+        sendBtn.disabled = true;
+        sendBtn.textContent = '⏳';
+    }
   }
 
   function handleSessionExpired() {
