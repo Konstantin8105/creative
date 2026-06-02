@@ -36,17 +36,12 @@ Cleans .txt and .md files in all books_folder directories from config:
 		log.Fatalf("Error loading config: %v", err)
 	}
 
-	configDir := cfg.ConfigDir()
-
 	for _, mode := range cfg.Modes {
 		if mode.BooksFolder == "" {
 			continue
 		}
 
 		folder := mode.BooksFolder
-		if !filepath.IsAbs(folder) {
-			folder = filepath.Join(configDir, folder)
-		}
 
 		folderInfo, err := os.Stat(folder)
 		if err != nil {
