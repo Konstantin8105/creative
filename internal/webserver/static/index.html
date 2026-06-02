@@ -720,7 +720,7 @@ body {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message ' + role;
     const avatar = role === 'user' ? '👤' : '🤖';
-    msgDiv.innerHTML = '<div class="avatar">' + avatar + '</div><div class="bubble"><p>' + escapeHtml(text) + '</p></div>';
+    msgDiv.innerHTML = '<div class="avatar">' + avatar + '</div><div class="bubble"><p>' + escapeHtml(text).replace(/\n/g, '<br>') + '</p></div>';
     msgContainer.appendChild(msgDiv);
     scrollToBottom(tabId);
   }
