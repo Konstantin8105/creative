@@ -99,7 +99,7 @@ func main() {
 	prvAI := creative.NewRouterAI(cfg.Provider)
 	ch := creative.NewChat(prvAI)
 	ch.AddSystem(prompt)
-	ch.SetTools(creative.BookTools(selectedMode.BooksFolder))
+	ch.SetTools(creative.BookTools(selectedMode.Folders...))
 
 	// Interactive chat loop
 	fmt.Printf("\n")
@@ -131,8 +131,8 @@ func main() {
 		if lower == "/new" {
 			ch = creative.NewChat(prvAI)
 			ch.AddSystem(prompt)
-			if selectedMode.BooksFolder != "" {
-				ch.SetTools(creative.BookTools(selectedMode.BooksFolder))
+			if len(selectedMode.Folders) != 0 {
+				ch.SetTools(creative.BookTools(selectedMode.Folders...))
 			}
 			fmt.Printf("%s--- Новый диалог ---%s\n\n", colorBold+colorCyan, colorReset)
 			continue

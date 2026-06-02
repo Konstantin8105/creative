@@ -37,23 +37,21 @@ Cleans .txt and .md files in all books_folder directories from config:
 	}
 
 	for _, mode := range cfg.Modes {
-		if mode.BooksFolder == "" {
-			continue
+		for _, folder := range mode.Folders {
+			if folder == "" {
+				continue
+			}
+			folderInfo, err := os.Stat(folder)
+			if err != nil {
+				log.Printf("Warning: mode %q: books_folder %q not found: %v", mode.Name, folder, err)
+				continue
+			}
+			if !folderInfo.IsDir() {
+				log.Printf("Warning: mode %q: books_folder %q is not a directory", mode.Name, folder)
+				continue
+			}
+			processFolder(mode.Name, folder)
 		}
-
-		folder := mode.BooksFolder
-
-		folderInfo, err := os.Stat(folder)
-		if err != nil {
-			log.Printf("Warning: mode %q: books_folder %q not found: %v", mode.Name, folder, err)
-			continue
-		}
-		if !folderInfo.IsDir() {
-			log.Printf("Warning: mode %q: books_folder %q is not a directory", mode.Name, folder)
-			continue
-		}
-
-		processFolder(mode.Name, folder)
 	}
 }
 

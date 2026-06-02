@@ -9,10 +9,10 @@ import (
 
 // ModeConfig represents a single chat mode with its label, prompt source, and books folder.
 type ModeConfig struct {
-	Name        string `json:"name"`
-	Label       string `json:"label"`
-	PromptFile  string `json:"prompt_file,omitempty"`
-	BooksFolder string `json:"books_folder,omitempty"`
+	Name       string   `json:"name"`
+	Label      string   `json:"label"`
+	PromptFile string   `json:"prompt_file,omitempty"`
+	Folders    []string `json:"books_folder,omitempty"`
 }
 
 // Config is the top-level configuration loaded from a JSON file.
@@ -47,11 +47,14 @@ func LoadConfig(path string) (*Config, error) {
 		if m.Label == "" {
 			return nil, fmt.Errorf("config: mode %q: label is required", m.Name)
 		}
-		if m.BooksFolder == "" {
+		if len(m.Folders) == 0 {
 			return nil, fmt.Errorf("config: mode %q: empty folder", m.Name)
 		}
-		if _, err := os.Stat(m.BooksFolder); os.IsNotExist(err) {
-			return nil, fmt.Errorf("config: mode %q: folder is not exist", m.Name)
+		for _, folder := range m.Folders {
+			if _, err := os.Stat(folder); os.IsNotExist(err) {
+				return nil, fmt.Errorf("config: mode %q: folder %s is not exist",
+					m.Name, folder)
+			}
 		}
 	}
 
@@ -66,14 +69,18 @@ func LoadConfig(path string) (*Config, error) {
 			continue
 		}
 		// search prompt
-		files, err := filepath.Glob(filepath.Join(m.BooksFolder, "*.promt"))
-		if err != nil {
-			panic(fmt.Errorf("find prompt: %v", err))
+		var promts []string
+		for _, folder := range m.Folders {
+			files, err := filepath.Glob(filepath.Join(folder, "*.promt"))
+			if err != nil {
+				panic(fmt.Errorf("find prompt: %v", err))
+			}
+			promts = append(promts, files...)
 		}
-		if len(files) != 1 {
-			panic(fmt.Errorf("find prompt: not valid amount prompts %d", len(files)))
+		if len(promts) != 1 {
+			panic(fmt.Errorf("find prompt: not valid amount prompts %d", len(promts)))
 		}
-		path := files[0]
+		path := promts[0]
 		_, err = os.ReadFile(path)
 		if err != nil {
 			panic(fmt.Errorf("mode `%s`: not found promt", m.Name))

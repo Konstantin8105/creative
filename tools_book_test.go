@@ -24,7 +24,7 @@ func TestToolPatterns(t *testing.T) {
 				continue
 			}
 			t.Run(fmt.Sprintf("%02d", il), func(t *testing.T) {
-				result := searchInBookTool(testdata, line)
+				result := searchInBookTool([]string{testdata}, line)
 				t.Logf("%s", result)
 			})
 		}
@@ -41,7 +41,7 @@ func TestToolPatterns(t *testing.T) {
 				continue
 			}
 			t.Run(fmt.Sprintf("%02d", il), func(t *testing.T) {
-				result := readBookLinesTool(testdata, line)
+				result := readBookLinesTool([]string{testdata}, line)
 				t.Logf("%s", result)
 			})
 		}

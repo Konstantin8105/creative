@@ -514,41 +514,6 @@ func TestLooksLikeRegex(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// splitOR
-// ---------------------------------------------------------------------------
-
-func TestSplitOR(t *testing.T) {
-	tests := []struct {
-		name    string
-		pattern string
-		want    []string
-	}{
-		{"empty", "", []string{""}},
-		{"single", "hello", []string{"hello"}},
-		{"two_parts", "hello|world", []string{"hello", "world"}},
-		{"three_parts", "a|b|c", []string{"a", "b", "c"}},
-		{"double_pipe", "a||b", []string{"a", "b"}},
-		{"leading_pipe", "|hello", []string{"hello"}},
-		{"trailing_pipe", "hello|", []string{"hello"}},
-		{"with_spaces", "hello world|foo bar", []string{"hello world", "foo bar"}},
-		{"trim_spaces", "  a  |  b  ", []string{"a", "b"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := splitOR(tt.pattern)
-			if len(got) != len(tt.want) {
-				t.Fatalf("len=%d, want %d; got %v, want %v", len(got), len(tt.want), got, tt.want)
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("got[%d]=%q, want %q", i, got[i], tt.want[i])
-				}
-			}
-		})
-	}
-}
-
-// ---------------------------------------------------------------------------
 // matchesAnyOR
 // ---------------------------------------------------------------------------
 
@@ -1076,9 +1041,9 @@ func TestSetCallback(t *testing.T) {
 
 // slowMockAI simulates a slow AI response by delaying before each chunk.
 type slowMockAI struct {
-	chunks   []string
-	delay    time.Duration
-	context  int
+	chunks  []string
+	delay   time.Duration
+	context int
 }
 
 func (m *slowMockAI) GetContextSize() int        { return m.context }

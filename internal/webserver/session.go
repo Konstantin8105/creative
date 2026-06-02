@@ -12,12 +12,12 @@ import (
 
 // Tab represents a single chat tab within a session.
 type Tab struct {
-	ID          string
-	Mode        string
-	Label       string
-	Chat        *creative.Chat
-	BooksFolder string
-	CreatedAt   time.Time
+	ID        string
+	Mode      string
+	Label     string
+	Chat      *creative.Chat
+	Folders   []string
+	CreatedAt time.Time
 }
 
 // Session represents a user session containing multiple independent tabs.
@@ -76,16 +76,16 @@ func (sm *SessionManager) CreateTab(sessionID, modeName string) (tabID string, e
 	ch := creative.NewChat(prvAI)
 	ch.AddSystem(prompt)
 
-	ch.SetTools(creative.BookTools(modeCfg.BooksFolder))
+	ch.SetTools(creative.BookTools(modeCfg.Folders...))
 
 	tabID = generateID()
 	tab := &Tab{
-		ID:          tabID,
-		Mode:        modeName,
-		Label:       modeCfg.Label,
-		Chat:        ch,
-		BooksFolder: modeCfg.BooksFolder,
-		CreatedAt:   time.Now(),
+		ID:        tabID,
+		Mode:      modeName,
+		Label:     modeCfg.Label,
+		Chat:      ch,
+		Folders:   modeCfg.Folders,
+		CreatedAt: time.Now(),
 	}
 
 	// One lock acquisition for session lookup/create + tab insertion

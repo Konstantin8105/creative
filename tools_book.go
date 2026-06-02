@@ -1,7 +1,6 @@
 package creative
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,7 +13,10 @@ import (
 
 // BookTools возвращает набор инструментов для работы с книгами.
 // Перед использованием установите BooksFolder.
-func BookTools(folder string) []Tool {
+func BookTools(folders ...string) []Tool {
+	if len(folders) == 0 {
+		panic("BookTools folders is empty")
+	}
 	return []Tool{
 		{
 			Name:        "list_books",
@@ -25,7 +27,7 @@ func BookTools(folder string) []Tool {
 				Required:   []string{},
 			},
 			Execute: func(params string) string {
-				return listBooksTool(folder, params)
+				return listBooksTool(folders, params)
 			},
 		},
 		{
@@ -50,7 +52,7 @@ func BookTools(folder string) []Tool {
 				Required: []string{"filename", "start_line", "end_line"},
 			},
 			Execute: func(params string) string {
-				return readBookLinesTool(folder, params)
+				return readBookLinesTool(folders, params)
 			},
 		},
 		{
@@ -76,25 +78,10 @@ func BookTools(folder string) []Tool {
 				Required: []string{"pattern"},
 			},
 			Execute: func(params string) string {
-				return searchInBookTool(folder, params)
+				return searchInBookTool(folders, params)
 			},
 		},
 	}
-}
-
-// resolveFile проверяет, что файл существует, имеет расширение .txt/.md,
-// находится внутри folder, и возвращает полный путь.
-func resolveFile(folder, filename string) (fullPath string, errMsg string) {
-	files, err := getFiles(folder)
-	if err != nil {
-		return "", err.Error()
-	}
-	for _, file := range files {
-		if file == filename {
-			return filepath.Clean(filepath.Join(folder, filename)), ""
-		}
-	}
-	return "", fmt.Sprintf("Ошибка: файл %q не найден. Используйте list_books для просмотра доступных книг.", filename)
 }
 
 func formatFileSize(bytes int64) string {
@@ -108,46 +95,65 @@ func formatFileSize(bytes int64) string {
 	}
 }
 
-// getFiles return all acceptable files
-func getFiles(folder string) (files []string, err error) {
-	if folder == "" {
-		err = fmt.Errorf("Ошибка: не указана папка с книгами. Установите переменную folder")
-		return
+// getFiles return all acceptable files ( ["C:\\Rer\\1.txt", "1.txt"],  ...)
+func getFiles(folders []string) (files [][2]string, err error) {
+	if len(folders) == 0 {
+		err = fmt.Errorf("getFiles folders is empty")
 	}
-	info, err := os.Stat(folder)
-	if err != nil {
-		err = fmt.Errorf("Ошибка: папка %q не найдена.", folder)
-		return
-	}
-	if !info.IsDir() {
-		err = fmt.Errorf("Ошибка: %q не является папкой.", folder)
-		return
-	}
+	for _, folder := range folders {
+		if folder == "" {
+			err = fmt.Errorf("Ошибка: не указана папка с книгами. Установите переменную folder")
+			return
+		}
+		var info os.FileInfo
+		info, err = os.Stat(folder)
+		if err != nil {
+			err = fmt.Errorf("Ошибка: папка %q не найдена.", folder)
+			return
+		}
+		if !info.IsDir() {
+			err = fmt.Errorf("Ошибка: %q не является папкой.", folder)
+			return
+		}
 
-	entries, err := os.ReadDir(folder)
-	if err != nil {
-		err = fmt.Errorf("Ошибка при чтении папки: %v", err)
-		return
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
+		folder, err = filepath.Abs(folder)
+		if !info.IsDir() {
+			err = fmt.Errorf("Ошибка: %q не могу получить аблолютный путь", folder)
+			return
 		}
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".txt" && ext != ".md" {
-			continue
+
+		var entries []os.DirEntry
+		entries, err = os.ReadDir(folder)
+		if err != nil {
+			err = fmt.Errorf("Ошибка при чтении папки: %v", err)
+			return
 		}
-		files = append(files, entry.Name())
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			ext := strings.ToLower(filepath.Ext(entry.Name()))
+			if ext != ".txt" && ext != ".md" && ext != ".go" {
+				continue
+			}
+			files = append(files, [2]string{
+				filepath.Join(folder, entry.Name()),
+				entry.Name(),
+			})
+		}
 	}
 	if len(files) == 0 {
 		err = fmt.Errorf("В папке не найдено книг.")
 		return
 	}
+	sort.Slice(files, func(i, j int) bool {
+		return files[i][1] < files[j][1]
+	})
 	return
 }
 
-func listBooksTool(folder, params string) string {
-	files, err := getFiles(folder)
+func listBooksTool(folders []string, _ string) string {
+	files, err := getFiles(folders)
 	if err != nil {
 		return err.Error()
 	}
@@ -161,26 +167,25 @@ func listBooksTool(folder, params string) string {
 		return fmt.Sprintf("%d", len(lines))
 	}
 
-	sort.Strings(files)
-	var b strings.Builder
-	fmt.Fprintf(&b, "Доступные книги:\n")
-	for _, name := range files {
-		fullPath := filepath.Join(folder, name)
-		fi, err := os.Stat(fullPath)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "Доступные книги:\n")
+	for _, file := range files {
+		fmt.Fprintf(&buf, "Файл: \"%s\"\n", file[1])
+		fi, err := os.Stat(file[0])
 		if err != nil {
+			fmt.Fprintf(&buf, "Не могу получить данные по файлу")
 			continue
 		}
-		lines := countLines(fullPath)
-		fmt.Fprintf(&b, "Файл: \"%s\"\n", name)
-		fmt.Fprintf(&b, "Размер: %s (%d байт)\n", formatFileSize(fi.Size()), fi.Size())
-		fmt.Fprintf(&b, "Строк: %s\n", lines)
-		fmt.Fprintf(&b, "Время последнего изменения файла: %s\n", fi.ModTime().Format("2006-01-02 15:04:05"))
-		fmt.Fprintf(&b, "\n")
+		fmt.Fprintf(&buf, "Размер: %s (%d байт)\n", formatFileSize(fi.Size()), fi.Size())
+		lines := countLines(file[0])
+		fmt.Fprintf(&buf, "Строк: %s\n", lines)
+		fmt.Fprintf(&buf, "Время последнего изменения файла: %s\n", fi.ModTime().Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(&buf, "\n")
 	}
-	return b.String()
+	return buf.String()
 }
 
-func readBookLinesTool(folder string, params string) string {
+func readBookLinesTool(folders []string, params string) string {
 	params = strings.TrimSpace(params)
 	if params == "" {
 		return "Ошибка: недостаточно параметров. Используйте: read_book_lines имя_файла начальная_строка конечная_строка"
@@ -212,25 +217,38 @@ func readBookLinesTool(folder string, params string) string {
 		return "Ошибка: слишком большой диапазон (максимум 1000 строк за вызов)."
 	}
 
-	fullPath, errMsg := resolveFile(folder, data.Filename)
-	if errMsg != "" {
-		return errMsg
-	}
-
-	dataFile, err := os.ReadFile(fullPath)
+	files, err := getFiles(folders)
 	if err != nil {
 		return err.Error()
 	}
-	lines := strings.Split(string(dataFile), "\n")
-	var b strings.Builder
-	fmt.Fprintf(&b, "--- Строки %d-%d из %q ---\n", data.Start, data.End, data.Filename)
-	for pos := data.Start - 1; pos <= data.End-1 && pos < len(lines); pos++ {
-		fmt.Fprintf(&b, "%d: %s\n", pos+1, lines[pos])
+
+	var buf strings.Builder
+	found := false
+	for _, file := range files {
+		var name string = file[1]
+		if name != data.Filename {
+			continue
+		}
+
+		dataFile, err := os.ReadFile(file[0])
+		if err != nil {
+			return err.Error()
+		}
+		lines := strings.Split(string(dataFile), "\n")
+		fmt.Fprintf(&buf, "--- Строки %d-%d из %q ---\n", data.Start, data.End, data.Filename)
+		for pos := data.Start - 1; pos <= data.End-1 && pos < len(lines); pos++ {
+			fmt.Fprintf(&buf, "%d: %s\n", pos+1, lines[pos])
+		}
+		found = true
+		break
 	}
-	return b.String()
+	if !found {
+		return fmt.Sprintf("Не найдет файл %s\n", data.Filename)
+	}
+	return buf.String()
 }
 
-func searchInBookTool(folder, params string) string {
+func searchInBookTool(folders []string, params string) string {
 	params = strings.TrimSpace(params)
 	if params == "" {
 		return "Ошибка: не указаны параметры. Используйте: search_in_book \"имя_файла\" \"паттерн\" [режим]"
@@ -247,38 +265,36 @@ func searchInBookTool(folder, params string) string {
 		return fmt.Sprintf("Ошибка: не корректной формат JSON для выходных данных: %v", err)
 	}
 
+	data.Filename = strings.TrimSpace(data.Filename)
 	data.Pattern = strings.TrimSpace(data.Pattern)
 	if data.Pattern == "" {
 		return "Ошибка: не указан паттерн. Используйте: search_in_book \"имя_файла\" \"паттерн\" [режим]"
 	}
 
-	files, err := getFiles(folder)
+	files, err := getFiles(folders)
 	if err != nil {
 		return err.Error()
 	}
-
-	// single search
+	if data.Filename == "" {
+		// search all files
+		var buf strings.Builder
+		for _, file := range files {
+			result := runSearch(file, data.Pattern, data.Mode)
+			fmt.Fprintf(&buf, "%s\n", result)
+		}
+		return buf.String()
+	}
+	// search in single file
 	for _, file := range files {
-		if file != data.Filename {
+		name := file[1]
+		if name != data.Filename {
 			continue
 		}
-		fullPath, errMsg := resolveFile(folder, file)
-		if errMsg != "" {
-			return errMsg
-		}
-		return runSearch(fullPath, data.Filename, data.Pattern, data.Mode)
+		result := runSearch(file, data.Pattern, data.Mode)
+		return result
 	}
-	// search in all files
-	var buf strings.Builder
-	for _, file := range files {
-		fullPath, errMsg := resolveFile(folder, file)
-		if errMsg != "" {
-			continue
-		}
-		result := runSearch(fullPath, file, data.Pattern, data.Mode)
-		fmt.Fprintf(&buf, "%s\n", result)
-	}
-	return buf.String()
+	// error
+	return "Ничего не найдено\n"
 }
 
 func splitLastMode(s string) (mode, pattern string) {
@@ -310,80 +326,102 @@ func looksLikeRegex(pattern string) bool {
 	return false
 }
 
-func runSearch(fullPath, filename, pattern, mode string) string {
+func runSearch(file [2]string, pattern, mode string) string {
+	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
 		return "Ошибка: не указан паттерн для поиска. Используйте search_in_book имя_файла \"текст для поиска\""
 	}
+	mode = strings.TrimSpace(mode)
 	mode = strings.ToLower(strings.TrimSpace(mode))
+
+	var buf strings.Builder
+	var isRegex bool
 	switch mode {
 	case "", "keyword":
 		if looksLikeRegex(pattern) {
 			if _, err := regexp.Compile(pattern); err == nil {
-				return searchByRegex(fullPath, filename, pattern)
+				isRegex = true
+				break
 			}
 		}
-		return searchByKeyword(fullPath, filename, pattern)
+		isRegex = false
 	case "regex":
-		return searchByRegex(fullPath, filename, pattern)
+		isRegex = true
 	default:
 		return fmt.Sprintf("Ошибка: неизвестный режим %q. Используйте 'keyword' или 'regex'.", mode)
 	}
-}
-
-func searchByKeyword(fullPath, filename, pattern string) string {
-	f, err := os.Open(fullPath)
-	if err != nil {
-		return fmt.Sprintf("Ошибка: не удалось открыть файл %q.", filename)
+	// naming
+	var modeName string
+	if isRegex {
+		modeName = "regex"
+	} else {
+		modeName = "keyword"
 	}
-	defer f.Close()
-
-	orParts := splitOR(pattern)
-	scanner := bufio.NewScanner(f)
-	var b strings.Builder
-	lineNum := 0
-	count := 0
-	maxResults := 50
-
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
-		lineLower := strings.ToLower(line)
-		if matchesAnyOR(lineLower, orParts) {
-			if count < maxResults {
-				fmt.Fprintf(&b, "Строка %d: %s\n", lineNum, strings.TrimSpace(line))
-			}
-			count++
+	// prepare regexp
+	var re *regexp.Regexp
+	if isRegex {
+		var err error
+		re, err = regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Sprintf("Ошибка: не удалось разобрать регулярное выражение: %v.\nИспользуйте mode=keyword для поиска по ключевым словам.", err)
 		}
 	}
+	// read file
+	data, err := os.ReadFile(file[0])
+	if err != nil {
+		return fmt.Sprintf("Ошибка: не могу прочесть файл %s\n", file[1])
+	}
+	lines := strings.Split(string(data), "\n")
 
+	// prepare patterns
+	orPatterns := func() []string {
+		raw := strings.Split(strings.ToLower(pattern), "|")
+		var parts []string
+		for _, p := range raw {
+			trimmed := strings.TrimSpace(p)
+			if trimmed == "" {
+				continue
+			}
+			parts = append(parts, strings.ToLower(trimmed))
+		}
+		if len(parts) == 0 {
+			return []string{strings.ToLower(pattern)}
+		}
+		return parts
+	}()
+
+	count := 0
+	maxResults := 200
+	for pos, line := range lines {
+		if isRegex {
+			if !re.MatchString(line) {
+				continue
+			}
+		} else {
+			if !matchesAnyOR(strings.ToLower(line), orPatterns) {
+				continue
+			}
+		}
+		if count < maxResults {
+			fmt.Fprintf(&buf, "Строка %d: %s\n", pos+1, strings.TrimSpace(line))
+		}
+		count++
+	}
 	if count == 0 {
-		return fmt.Sprintf("В файле %q не найдено совпадений с %q.", filename, pattern)
+		return fmt.Sprintf("В файле %q не найдено совпадений с паттерном %q в режиме %s.", file[1], pattern, modeName)
 	}
 
 	var result strings.Builder
-	fmt.Fprintf(&result, "Поиск в %q (режим: keyword, паттерн: %q)\n", filename, pattern)
+
+	fmt.Fprintf(&result, "Поиск в %q (паттерн: %q)\n", file[1], pattern)
+	fmt.Fprintf(&result, "Режим: \"%s\"\n", modeName)
 	fmt.Fprintf(&result, "Найдено %d совпадений", count)
 	if count > maxResults {
 		fmt.Fprintf(&result, " (показаны первые %d)", maxResults)
 	}
 	result.WriteString(":\n\n")
-	result.WriteString(b.String())
+	result.WriteString(buf.String())
 	return result.String()
-}
-
-func splitOR(pattern string) []string {
-	raw := strings.Split(pattern, "|")
-	var parts []string
-	for _, p := range raw {
-		trimmed := strings.TrimSpace(p)
-		if trimmed != "" {
-			parts = append(parts, strings.ToLower(trimmed))
-		}
-	}
-	if len(parts) == 0 {
-		return []string{strings.ToLower(pattern)}
-	}
-	return parts
 }
 
 func matchesAnyOR(lineLower string, orParts []string) bool {
@@ -396,48 +434,4 @@ func matchesAnyOR(lineLower string, orParts []string) bool {
 		}
 	}
 	return false
-}
-
-func searchByRegex(fullPath, filename, pattern string) string {
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return fmt.Sprintf("Ошибка: не удалось разобрать регулярное выражение: %v.\nИспользуйте mode=keyword для поиска по ключевым словам.", err)
-	}
-
-	f, err := os.Open(fullPath)
-	if err != nil {
-		return fmt.Sprintf("Ошибка: не удалось открыть файл %q.", filename)
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	var b strings.Builder
-	lineNum := 0
-	count := 0
-	maxResults := 50
-
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
-		if re.MatchString(line) {
-			if count < maxResults {
-				fmt.Fprintf(&b, "Строка %d: %s\n", lineNum, strings.TrimSpace(line))
-			}
-			count++
-		}
-	}
-
-	if count == 0 {
-		return fmt.Sprintf("В файле %q не найдено совпадений с регулярным выражением %q.", filename, pattern)
-	}
-
-	var result strings.Builder
-	fmt.Fprintf(&result, "Поиск в %q (режим: regex, паттерн: %q)\n", filename, pattern)
-	fmt.Fprintf(&result, "Найдено %d совпадений", count)
-	if count > maxResults {
-		fmt.Fprintf(&result, " (показаны первые %d)", maxResults)
-	}
-	result.WriteString(":\n\n")
-	result.WriteString(b.String())
-	return result.String()
 }
