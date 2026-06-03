@@ -78,7 +78,29 @@ func BookTools(folders ...string) []Tool {
 				Required: []string{"pattern"},
 			},
 			Execute: func(params string) string {
-				return searchInBookTool(folders, params)
+				return searchInBookTool(folders, params, false)
+			},
+		},
+		{
+			Name:        "search_stats",
+			Description: "Search in all books by keywords or regular expression. Parameters: pattern, mode (optional). Modes: keyword (substring search with | as OR, default) or regex. Example: search_stats \"Napoleon\" or search_stats pattern keyword",
+			Parameters: &ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"pattern": {
+						Type:        "string",
+						Description: "Search pattern: keyword or regular expression. Use | for OR in keyword mode (e.g., 'anchor|belief|state')",
+					},
+					"mode": {
+						Type:        "string",
+						Description: "Search mode: 'keyword' (default, case-insensitive, use | for OR) or 'regex'",
+						Enum:        []string{"keyword", "regex"},
+					},
+				},
+				Required: []string{"pattern"},
+			},
+			Execute: func(params string) string {
+				return searchInBookTool(folders, params, true)
 			},
 		},
 	}
@@ -248,7 +270,7 @@ func readBookLinesTool(folders []string, params string) string {
 	return buf.String()
 }
 
-func searchInBookTool(folders []string, params string) string {
+func searchInBookTool(folders []string, params string, statistic bool) string {
 	params = strings.TrimSpace(params)
 	if params == "" {
 		return "Ошибка: не указаны параметры. Используйте: search_in_book \"имя_файла\" \"паттерн\" [режим]"
@@ -275,11 +297,11 @@ func searchInBookTool(folders []string, params string) string {
 	if err != nil {
 		return err.Error()
 	}
-	if data.Filename == "" {
+	if data.Filename == "" || statistic {
 		// search all files
 		var buf strings.Builder
 		for _, file := range files {
-			result := runSearch(file, data.Pattern, data.Mode)
+			result := runSearch(file, data.Pattern, data.Mode, statistic)
 			fmt.Fprintf(&buf, "%s\n", result)
 		}
 		return buf.String()
@@ -290,7 +312,7 @@ func searchInBookTool(folders []string, params string) string {
 		if name != data.Filename {
 			continue
 		}
-		result := runSearch(file, data.Pattern, data.Mode)
+		result := runSearch(file, data.Pattern, data.Mode, false)
 		return result
 	}
 	// error
@@ -326,7 +348,7 @@ func looksLikeRegex(pattern string) bool {
 	return false
 }
 
-func runSearch(file [2]string, pattern, mode string) string {
+func runSearch(file [2]string, pattern, mode string, statistic bool) string {
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
 		return "Ошибка: не указан паттерн для поиска. Используйте search_in_book имя_файла \"текст для поиска\""
@@ -334,7 +356,6 @@ func runSearch(file [2]string, pattern, mode string) string {
 	mode = strings.TrimSpace(mode)
 	mode = strings.ToLower(strings.TrimSpace(mode))
 
-	var buf strings.Builder
 	var isRegex bool
 	switch mode {
 	case "", "keyword":
@@ -390,6 +411,7 @@ func runSearch(file [2]string, pattern, mode string) string {
 		return parts
 	}()
 
+	var buf strings.Builder
 	count := 0
 	maxResults := 200
 	for pos, line := range lines {
@@ -402,17 +424,23 @@ func runSearch(file [2]string, pattern, mode string) string {
 				continue
 			}
 		}
-		if count < maxResults {
+		if count < maxResults && !statistic {
 			fmt.Fprintf(&buf, "Строка %d: %s\n", pos+1, strings.TrimSpace(line))
 		}
 		count++
 	}
 	if count == 0 {
+		if statistic {
+			return "" // не выводить ничего
+		}
 		return fmt.Sprintf("В файле %q не найдено совпадений с паттерном %q в режиме %s.", file[1], pattern, modeName)
+	}
+	if statistic {
+		return fmt.Sprintf("Совпадений в файле %s (паттерн: %q): %d\n",
+			file[1], pattern, count)
 	}
 
 	var result strings.Builder
-
 	fmt.Fprintf(&result, "Поиск в %q (паттерн: %q)\n", file[1], pattern)
 	fmt.Fprintf(&result, "Режим: \"%s\"\n", modeName)
 	fmt.Fprintf(&result, "Найдено %d совпадений", count)
