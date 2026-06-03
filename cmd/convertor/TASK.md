@@ -25,3 +25,4 @@
 
 winget install --source winget --exact --id JohnMacFarlane.Pandoc
 https://github.com/UB-Mannheim/tesseract/wiki
+pip install kreuzberg
