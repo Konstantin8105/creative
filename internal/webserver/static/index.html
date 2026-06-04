@@ -7,37 +7,41 @@
 <style>
 :root {
   /* ─── Фоны ─── */
-  --bg-page: #3e4055;       /* страница */
-  --bg-card: #24283b;        /* шапка, панели, облачка ассистента, модалки */
-  --bg-input: #1f2335;       /* поля ввода, код, уведомления, табы (неактивные) */
-  --bg-hover: #2f3348;       /* наведение на табы, кнопки в модалке */
+  --bg-page: #f3f2ee;       /* тёплый светлый фон страницы */
+  --bg-card: #ffffff;        /* белые карточки, панели, облачка ассистента */
+  --bg-input: #edebe7;       /* поля ввода, код, табы (неактивные) */
+  --bg-hover: #e3e1dc;       /* наведение на табы, кнопки в модалке */
 
-  /* ─── Текст ─── */
-  --text: #e4e7f7;           /* основной текст */
-  --text-dim: #bbc2e2;       /* приглушённый (плейсхолдеры, muted, системные сообщения) */
+  /* ─── Текст (максимальный контраст) ─── */
+  --text: #1a1a2e;           /* глубокий тёмно-синий — AAA на всех фонах */
+  --text-dim: #52525b;       /* приглушённый — AA на всех фонах (было #6b7280 — FAIL) */
 
-  /* ─── Акценты ─── */
-  --blue: #7aa2f7;           /* граница фокуса, активные табы, ссылки */
-  --green: #9ece6a;          /* потоковый текст (streaming), инлайн-код */
-  --yellow: #e0af68;         /* жирный текст, имена инструментов */
-  --red: #f7768e;            /* закрытие вкладки, опасность */
-  --purple: #bb9af7;         /* граница блока reasoning */
-  --cyan: #7dcfff;           /* заголовки h1-h4, em, заголовки таблиц */
+  /* ─── Акценты (премиальные оттенки, проверено AA на всех фонах) ─── */
+  --blue: #2563eb;           /* ссылки — AA на card/page */
+  --green: #047857;          /* inline code — AA на всех фонах (было #059669 — FAIL) */
+  --yellow: #92400e;         /* bold/strong — AA на всех фонах (было #d97706 — FAIL) */
+  --red: #dc2626;            /* только как background (с белым текстом) — OK */
+  --purple: #7c3aed;         /* reasoning — AA на всех фонах */
+  --cyan: #0e7490;           /* заголовки h1-h4 — AA на всех фонах (было #0891b2 — FAIL) */
 
-  /* ─── Границы ─── */
-  --border: #5871b8;         /* все边框 */
+  /* ─── Текст поверх акцентных фонов ─── */
+  --on-accent: #ffffff;
+
+  /* ─── Границы (тёплые, мягкие) ─── */
+  --border: #d4d0c9;
 
   /* ─── Наложение ─── */
-  --overlay: rgba(0,0,0,0.6); /* затемнение под модалкой */
+  --overlay: rgba(0,0,0,0.25);
 
   /* ─── Геометрия ─── */
   --radius: 12px;
   --radius-msg: 16px;
 
-  /* ─── Шрифты (только стандартные) ─── */
+  /* ─── Шрифты ─── */
   --font-mono: monospace;
   --font-sans: sans-serif;
 }
+
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
 body {
@@ -167,7 +171,7 @@ body {
   max-width: 75%; padding: 12px 16px; border-radius: var(--radius-msg);
   line-height: 1.6; font-size: 14px; word-wrap: break-word;
 }
-.message.user .bubble { background: var(--blue); color: var(--bg-page); border-bottom-right-radius: 4px; }
+.message.user .bubble { background: var(--blue); color: var(--on-accent); border-bottom-right-radius: 4px; }
 .message.assistant .bubble { background: var(--bg-card); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 .message.system .bubble { background: transparent; color: var(--text-dim); font-size: 12px; text-align: center; }
 
@@ -254,7 +258,7 @@ body {
 #message-input:focus { border-color: var(--blue); }
 #message-input::placeholder { color: var(--text-dim); }
 #send-btn {
-  background: var(--blue); color: var(--bg-page); border: none;
+  background: var(--blue); color: var(--on-accent); border: none;
   border-radius: 50%; width: 48px; height: 48px;
   cursor: pointer; font-size: 20px;
   display: flex; align-items: center; justify-content: center;
