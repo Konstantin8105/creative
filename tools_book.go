@@ -83,7 +83,7 @@ func BookTools(folders ...string) []Tool {
 		},
 		{
 			Name:        "search_stats",
-			Description: "Search in all books by keywords or regular expression. Parameters: pattern, mode (optional). Modes: keyword (substring search with | as OR, default) or regex. Example: search_stats \"Napoleon\" or search_stats pattern keyword",
+			Description: "Search in all books by keywords or regular expression. Parameters: pattern, mode (optional). Modes: keyword (substring search with | as OR, default) or regex. Try to use this tool before search_in_book for avoid many noise information. Example: search_stats \"Napoleon\" or search_stats pattern keyword",
 			Parameters: &ToolParameters{
 				Type: "object",
 				Properties: map[string]ToolProperty{
