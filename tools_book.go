@@ -57,7 +57,7 @@ func BookTools(folders ...string) []Tool {
 		},
 		{
 			Name:        "search_in_book",
-			Description: "Search in books by keywords or regular expression. If filename is specified, search only in that book. If filename is omitted, search across all books. Parameters: filename (optional), pattern, mode (optional). Modes: keyword (substring search with | as OR, default) or regex. Example: search_in_book book.txt \"Napoleon\" or search_in_book pattern keyword",
+			Description: "Search in books by keywords or regular expression and return text lines of books with pattern. If filename is specified, search only in that book. If filename is omitted, search across all books. Parameters: filename (optional), pattern, mode (optional). Modes: keyword (substring search with | as OR, default) or regex. Example: search_in_book book.txt \"Napoleon\" or search_in_book pattern keyword",
 			Parameters: &ToolParameters{
 				Type: "object",
 				Properties: map[string]ToolProperty{
@@ -83,7 +83,7 @@ func BookTools(folders ...string) []Tool {
 		},
 		{
 			Name:        "search_stats",
-			Description: "Search in all books by keywords or regular expression. Parameters: pattern, mode (optional). Modes: keyword (substring search with | as OR, default) or regex. Try to use this tool before search_in_book for avoid many noise information. Example: search_stats \"Napoleon\" or search_stats pattern keyword",
+			Description: "Search in all books by keywords or regular expression and return amount founded lines. Parameters: pattern, mode (optional). Modes: keyword (substring search with | as OR, default) or regex. Example: search_stats \"Napoleon\" or search_stats pattern keyword",
 			Parameters: &ToolParameters{
 				Type: "object",
 				Properties: map[string]ToolProperty{
