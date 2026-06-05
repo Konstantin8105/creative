@@ -122,6 +122,17 @@ func getFiles(folders []string) (files [][2]string, err error) {
 	if len(folders) == 0 {
 		err = fmt.Errorf("getFiles folders is empty")
 	}
+	isAcceptable := func(ext string) bool {
+		for _, acc := range []string{
+			".txt", ".md", ".go",
+			".sln", ".vb",
+		} {
+			if ext == acc {
+				return true
+			}
+		}
+		return false
+	}
 	for _, folder := range folders {
 		if folder == "" {
 			err = fmt.Errorf("Ошибка: не указана папка с книгами. Установите переменную folder")
@@ -155,7 +166,7 @@ func getFiles(folders []string) (files [][2]string, err error) {
 				continue
 			}
 			ext := strings.ToLower(filepath.Ext(entry.Name()))
-			if ext != ".txt" && ext != ".md" && ext != ".go" {
+			if !isAcceptable(ext) {
 				continue
 			}
 			files = append(files, [2]string{
