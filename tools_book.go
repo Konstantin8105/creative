@@ -311,9 +311,18 @@ func searchInBookTool(folders []string, params string, statistic bool) string {
 	if data.Filename == "" || statistic {
 		// search all files
 		var buf strings.Builder
+		var found bool
 		for _, file := range files {
-			result := runSearch(file, data.Pattern, data.Mode, statistic)
+			result, err := runSearch(file, data.Pattern, data.Mode, statistic)
+			if err != nil {
+				// do not write errors
+				continue
+			}
+			found = true
 			fmt.Fprintf(&buf, "%s\n", result)
+		}
+		if !found {
+			return "ничего не найдено."
 		}
 		return buf.String()
 	}
@@ -323,7 +332,10 @@ func searchInBookTool(folders []string, params string, statistic bool) string {
 		if name != data.Filename {
 			continue
 		}
-		result := runSearch(file, data.Pattern, data.Mode, false)
+		result, err := runSearch(file, data.Pattern, data.Mode, false)
+		if err != nil {
+			return err.Error()
+		}
 		return result
 	}
 	// error
@@ -359,10 +371,16 @@ func looksLikeRegex(pattern string) bool {
 	return false
 }
 
-func runSearch(file [2]string, pattern, mode string, statistic bool) string {
+func runSearch(file [2]string, pattern, mode string, statistic bool) (_ string, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("Ошибка в файле `%s`: %v.", file[1], err)
+		}
+	}()
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
-		return "Ошибка: не указан паттерн для поиска. Используйте search_in_book имя_файла \"текст для поиска\""
+		err = fmt.Errorf("не указан паттерн для поиска")
+		return
 	}
 	mode = strings.TrimSpace(mode)
 	mode = strings.ToLower(strings.TrimSpace(mode))
@@ -380,7 +398,8 @@ func runSearch(file [2]string, pattern, mode string, statistic bool) string {
 	case "regex":
 		isRegex = true
 	default:
-		return fmt.Sprintf("Ошибка: неизвестный режим %q. Используйте 'keyword' или 'regex'.", mode)
+		err = fmt.Errorf("неизвестный режим %q. Используйте 'keyword' или 'regex'.", mode)
+		return
 	}
 	// naming
 	var modeName string
@@ -392,16 +411,17 @@ func runSearch(file [2]string, pattern, mode string, statistic bool) string {
 	// prepare regexp
 	var re *regexp.Regexp
 	if isRegex {
-		var err error
 		re, err = regexp.Compile(pattern)
 		if err != nil {
-			return fmt.Sprintf("Ошибка: не удалось разобрать регулярное выражение: %v.\nИспользуйте mode=keyword для поиска по ключевым словам.", err)
+			err = fmt.Errorf("не удалось разобрать регулярное выражение: %v", err)
+			return
 		}
 	}
 	// read file
 	data, err := os.ReadFile(file[0])
 	if err != nil {
-		return fmt.Sprintf("Ошибка: не могу прочесть файл %s\n", file[1])
+		err = fmt.Errorf("не могу прочесть файл\n")
+		return
 	}
 	lines := strings.Split(string(data), "\n")
 
@@ -442,13 +462,14 @@ func runSearch(file [2]string, pattern, mode string, statistic bool) string {
 	}
 	if count == 0 {
 		if statistic {
-			return "" // не выводить ничего
+			return // не выводить ничего
 		}
-		return fmt.Sprintf("В файле %q не найдено совпадений с паттерном %q в режиме %s.", file[1], pattern, modeName)
+		err = fmt.Errorf("не найдено совпадений")
+		return
 	}
 	if statistic {
 		return fmt.Sprintf("Совпадений в файле %s (паттерн: %q): %d\n",
-			file[1], pattern, count)
+			file[1], pattern, count), nil
 	}
 
 	var result strings.Builder
@@ -460,7 +481,7 @@ func runSearch(file [2]string, pattern, mode string, statistic bool) string {
 	}
 	result.WriteString(":\n\n")
 	result.WriteString(buf.String())
-	return result.String()
+	return result.String(), nil
 }
 
 func matchesAnyOR(lineLower string, orParts []string) bool {

@@ -764,7 +764,11 @@ body {
     const panel = document.getElementById('panel-' + tabId);
     if (!panel) return;
     const msgs = panel.querySelector('.chat-messages');
-    if (msgs) msgs.scrollTop = msgs.scrollHeight;
+    if (!msgs) return;
+    const threshold = 30;
+    if (msgs.scrollTop + msgs.clientHeight >= msgs.scrollHeight - threshold) {
+      msgs.scrollTop = msgs.scrollHeight;
+    }
   }
 
   window.toggleReasoning = function(el) {
