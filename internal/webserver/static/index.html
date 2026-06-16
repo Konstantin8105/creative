@@ -44,7 +44,7 @@
   --radius-msg: 16px;
 
   /* ─── Шрифты ─── */
-  --font-mono: monospace;
+
   --font-sans: sans-serif;
 }
 
@@ -202,7 +202,7 @@ body {
 .bubble em, .bubble i { color: var(--cyan); }
 .bubble code {
   background: none; padding: 0 2px; border-radius: 0;
-  font-family: var(--font-mono); font-size: 13px; color: var(--green);
+  font-family: var(--font-sans); font-size: 13px; color: var(--green);
 }
 .bubble pre {
   background: none; border: 1px solid var(--border);
@@ -217,12 +217,12 @@ body {
 .bubble a { color: var(--blue); text-decoration: none; }
 .bubble a:hover { text-decoration: underline; }
 .bubble blockquote { border-left: 3px solid var(--blue); padding-left: 12px; margin: 8px 0; color: var(--text-dim); }
-.bubble .streaming-text { white-space: pre-wrap; word-wrap: break-word; font-family: var(--font-mono); font-size: 13px; color: var(--text); line-height: 1.5; }
+.bubble .streaming-text { white-space: pre-wrap; word-wrap: break-word; font-family: var(--font-sans); font-size: 13px; color: var(--text); line-height: 1.5; }
 
 .tool-notice {
   display: flex; align-items: flex-start; gap: 8px; padding: 6px 12px; margin: 4px 0;
   background: var(--soft-bg); border: 1px solid var(--border); border-radius: 8px;
-  font-size: 12px; color: var(--text-dim); animation: fadeIn 0.2s ease;
+  font-size: 14px; color: var(--text); line-height: 1.6; animation: fadeIn 0.2s ease;
 }
 .tool-notice .icon { font-size: 14px; }
 .tool-notice .name { color: var(--yellow); font-weight: 600; }
@@ -233,7 +233,7 @@ body {
 .info-notice {
   display: flex; align-items: flex-start; gap: 8px; padding: 6px 12px; margin: 4px 0;
   background: var(--soft-bg); border: 1px solid var(--border); border-radius: 8px;
-  font-size: 12px; color: var(--text-dim); animation: fadeIn 0.2s ease;
+  font-size: 14px; color: var(--text); line-height: 1.6; animation: fadeIn 0.2s ease;
 }
 .info-notice .icon { font-size: 14px; }
 .info-notice .info-type { color: var(--cyan); font-weight: 600; }
