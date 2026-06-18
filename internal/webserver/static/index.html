@@ -249,6 +249,38 @@ body {
 .reasoning-content { display: none; padding: 8px 0; margin: 4px 0; background: none; border-radius: 0; border-left: 3px solid var(--purple); font-size: 13px; color: var(--text-dim); line-height: 1.5; }
 .reasoning-content.open { display: block; }
 
+.message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.copy-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-dim);
+  transition: background 0.15s, color 0.15s;
+}
+.copy-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.msg-time {
+  color: var(--text-dim);
+}
+.msg-elapsed {
+  margin-left: 8px;
+  color: var(--text-dim);
+}
+
 .typing-indicator { display: none; padding: 8px 0; }
 .typing-indicator.active { display: flex; }
 .typing-dot { width: 8px; height: 8px; background: var(--text-dim); border-radius: 50%; margin-right: 6px; animation: typingBounce 1.4s infinite ease-in-out both; }
@@ -582,6 +614,7 @@ body {
     msgDiv.className = 'message assistant';
     msgDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="tools-container"></div><div class="streaming-text" style="display:none"></div><div class="rendered-content"></div><div class="typing-indicator active"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
     msgContainer.appendChild(msgDiv);
+    msgDiv.dataset.requestTime = Date.now();
 
     tabs[tabId].isStreaming = true;
     setInputState(false);
@@ -601,6 +634,7 @@ body {
 	  if (response.status === 410) {
 		console.error('[410] session=%s tab=%s message=%s', sessionId, tabId, text);
 		renderedContentDiv.textContent = '⚠️ Сессия утеряна. Откройте новую вкладку.';
+        addMessageFooter(bubble);
         tabs[tabId].isStreaming = false;
         setInputState(true);
         removeTypingIndicator(msgDiv);
@@ -609,6 +643,7 @@ body {
 
       if (!response.ok) {
         renderedContentDiv.textContent = 'Error: ' + response.status;
+        addMessageFooter(bubble);
         tabs[tabId].isStreaming = false;
         setInputState(true);
         removeTypingIndicator(msgDiv);
@@ -643,6 +678,7 @@ body {
       }
     } catch (err) {
       renderedContentDiv.textContent = 'Network error: ' + err.message;
+      addMessageFooter(bubble);
 	} finally {
 	  if (tabs[tabId]) {
 	     tabs[tabId].isStreaming = false;
@@ -727,6 +763,14 @@ body {
           reasoningDiv.innerHTML = '<div class="reasoning-toggle" onclick="toggleReasoning(this)"><span class="arrow">▶</span> <span>Reasoning</span></div><div class="reasoning-content" style="display:none">' + data.reasoning_html + '</div>';
           bubble.appendChild(reasoningDiv);
         }
+
+        {
+          const elapsed = Date.now() - (parseInt(msgDiv.dataset.requestTime) || Date.now());
+          const footer = document.createElement('div');
+          footer.className = 'message-footer';
+          footer.innerHTML = '<span class="msg-time">' + formatTimestamp() + '<span class="msg-elapsed"> ⏱ ' + formatElapsed(elapsed) + '</span></span><button class="copy-btn" onclick="copyMessage(this)">📋</button>';
+          bubble.appendChild(footer);
+        }
         scrollToBottom(tabId);
         break;
     }
@@ -744,7 +788,7 @@ body {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message ' + role;
     const avatar = role === 'user' ? '👤' : '🤖';
-    msgDiv.innerHTML = '<div class="avatar">' + avatar + '</div><div class="bubble"><p>' + escapeHtml(text).replace(/\n/g, '<br>') + '</p></div>';
+    msgDiv.innerHTML = '<div class="avatar">' + avatar + '</div><div class="bubble"><p>' + escapeHtml(text).replace(/\n/g, '<br>') + '</p><div class="message-footer"><span class="msg-time">' + formatTimestamp() + '</span><button class="copy-btn" onclick="copyMessage(this)">📋</button></div></div>';
     msgContainer.appendChild(msgDiv);
     scrollToBottom(tabId);
   }
@@ -824,6 +868,51 @@ body {
     maxLen = 500;
     if (!str) return '';
     return str.length > maxLen ? str.slice(0, maxLen) + '...' : str;
+  }
+
+  window.copyMessage = function(btn) {
+    const bubble = btn.closest('.bubble');
+    if (!bubble) return;
+    let text = '';
+    const rendered = bubble.querySelector('.rendered-content');
+    if (rendered && rendered.style.display !== 'none') {
+      text = rendered.textContent || '';
+    } else {
+      const p = bubble.querySelector('p');
+      text = p ? p.textContent || '' : bubble.textContent || '';
+    }
+    navigator.clipboard.writeText(text.trim()).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text.trim();
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+  };
+
+  function formatTimestamp() {
+    return new Date().toLocaleString('en-US', { hour12: false });
+  }
+
+  function formatElapsed(ms) {
+    if (ms < 1000) return (ms / 1000).toFixed(1) + 's';
+    const totalSec = Math.floor(ms / 1000);
+    if (totalSec < 60) {
+      const dec = Math.floor((ms % 1000) / 100);
+      return totalSec + '.' + dec + 's';
+    }
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return m + 'm ' + s + 's';
+  }
+
+  function addMessageFooter(bubble) {
+    if (!bubble || bubble.querySelector('.message-footer')) return;
+    const footer = document.createElement('div');
+    footer.className = 'message-footer';
+    footer.innerHTML = '<span class="msg-time">' + formatTimestamp() + '</span><button class="copy-btn" onclick="copyMessage(this)">📋</button>';
+    bubble.appendChild(footer);
   }
 })();
 </script>
