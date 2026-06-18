@@ -878,10 +878,18 @@ body {
     let text = '';
     const rendered = bubble.querySelector('.rendered-content');
     if (rendered && rendered.style.display !== 'none') {
-      text = rendered.textContent || '';
+      const clone = rendered.cloneNode(true);
+      clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+      text = clone.textContent || '';
     } else {
       const p = bubble.querySelector('p');
-      text = p ? p.textContent || '' : bubble.textContent || '';
+      if (p) {
+        const clone = p.cloneNode(true);
+        clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+        text = clone.textContent || '';
+      } else {
+        text = bubble.textContent || '';
+      }
     }
     navigator.clipboard.writeText(text.trim()).catch(() => {
       const ta = document.createElement('textarea');
