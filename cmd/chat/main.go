@@ -45,7 +45,6 @@ func main() {
 
 	// Web mode: start HTTP server
 	webserver.Start(cfg, *port)
-	return
 }
 
 func configHelpText() string {
