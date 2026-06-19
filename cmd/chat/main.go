@@ -74,7 +74,7 @@ func configHelpText() string {
 		},
 	}
 
-	data, err := json.Marshal(cfg)
+	data, err := json.MarshalIndent(cfg, " ", "  ")
 	if err != nil {
 		panic(err)
 	}
