@@ -384,7 +384,8 @@ body {
   .header, .input-area, .tab-bar, .mode-selector-overlay,
   #send-btn, #message-input { display: none; }
   .chat-panels { overflow: visible; position: static; flex: none; height: auto; }
-  .chat-panel { position: static; visibility: visible; opacity: 1; height: auto; display: flex; flex-direction: column; }
+  .chat-panel { display: none; }
+  .chat-panel.active { display: flex; position: static; visibility: visible; opacity: 1; height: auto; flex-direction: column; }
   .chat-messages { overflow: visible; height: auto; max-height: none; }
   .message .bubble { max-width: 100%; }
   .copy-btn, .msg-elapsed, .typing-indicator,
