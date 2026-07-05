@@ -3,6 +3,7 @@ package creative
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 )
@@ -13,6 +14,7 @@ type ModeConfig struct {
 	Label      string   `json:"label"`
 	PromptFile string   `json:"prompt_file,omitempty"`
 	Folders    []string `json:"books_folder,omitempty"`
+	PerFolder  bool     `json:"per_folder"`
 }
 
 // Config is the top-level configuration loaded from a JSON file.
@@ -56,6 +58,35 @@ func LoadConfig(path string) (*Config, error) {
 					m.Name, folder)
 			}
 		}
+	}
+
+	// per folder
+again:
+	for i, m := range cfg.Modes {
+		if !m.PerFolder {
+			continue
+		}
+		// remove
+		cfg.Modes = append(cfg.Modes[:i], cfg.Modes[i+1:]...)
+		// add new
+		for _, folders := range m.Folders {
+			es, err := os.ReadDir(folders)
+			if err != nil {
+				return nil, err
+			}
+			for _, e := range es {
+				if !e.IsDir() {
+					continue
+				}
+				cfg.Modes = append(cfg.Modes, ModeConfig{
+					Name:       fmt.Sprintf("%s%d", m.Name, rand.Int31()),
+					Label:      e.Name(),
+					PromptFile: m.PromptFile,
+					Folders:    []string{filepath.Join(folders, e.Name())},
+				})
+			}
+		}
+		goto again
 	}
 
 	// find prompt

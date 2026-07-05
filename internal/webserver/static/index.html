@@ -338,6 +338,10 @@ body {
   min-width: 300px;
 }
 .mode-selector-modal h3 { margin-bottom: 16px; color: var(--text); }
+#mode-list { max-height: 220px; overflow-y: auto; }
+#mode-list::-webkit-scrollbar { width: 6px; }
+#mode-list::-webkit-scrollbar-track { background: transparent; }
+#mode-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .mode-option {
   display: block;
   width: 100%;
@@ -391,7 +395,7 @@ body {
     </div>
   </div>
 
-  <div class="mode-selector-overlay" id="mode-selector">
+  <div class="mode-selector-overlay" id="mode-selector" tabindex="0">
     <div class="mode-selector-modal">
       <h3>Выберите режим</h3>
       <div id="mode-list"></div>
@@ -418,6 +422,10 @@ body {
   const sendBtn = document.getElementById('send-btn');
   const modeSelector = document.getElementById('mode-selector');
   const modeList = document.getElementById('mode-list');
+
+  modeSelector.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModeSelector();
+  });
 
   // ─── Input setup ───
   input.addEventListener('input', () => {
@@ -584,6 +592,7 @@ body {
       modeList.appendChild(btn);
     });
     modeSelector.classList.add('open');
+    modeSelector.focus();
   }
   window.closeModeSelector = function() { modeSelector.classList.remove('open'); };
 
