@@ -213,7 +213,7 @@ func (sm *SessionManager) cleanup() {
 
 	now := time.Now()
 	for id, s := range sm.sessions {
-		if now.Sub(s.LastActivity) > sm.ttl || now.Sub(s.CreatedAt) > 24*time.Hour {
+		if now.Sub(s.LastActivity) > sm.ttl {
 			delete(sm.sessions, id)
 			log.Printf("[session] expired: %s (age: %v, inactive: %v)",
 				id[:min(len(id), 8)], now.Sub(s.CreatedAt), now.Sub(s.LastActivity))
