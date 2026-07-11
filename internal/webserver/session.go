@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,11 +14,24 @@ import (
 // Tab represents a single chat tab within a session.
 type Tab struct {
 	ID        string
-	Mode      string
+	Modes     []string
 	Label     string
 	Chat      *creative.Chat
 	Folders   []string
 	CreatedAt time.Time
+}
+
+// PrimaryMode returns the first mode name.
+func (t *Tab) PrimaryMode() string {
+	if len(t.Modes) > 0 {
+		return t.Modes[0]
+	}
+	return ""
+}
+
+// IsCombo returns true if this tab combines multiple modes.
+func (t *Tab) IsCombo() bool {
+	return len(t.Modes) > 1
 }
 
 // Session represents a user session containing multiple independent tabs.
@@ -29,9 +43,9 @@ type Session struct {
 
 // TabInfo is a serializable summary of a tab for the API.
 type TabInfo struct {
-	ID    string `json:"id"`
-	Mode  string `json:"mode"`
-	Label string `json:"label"`
+	ID    string   `json:"id"`
+	Modes []string `json:"modes"`
+	Label string   `json:"label"`
 }
 
 // SessionManager manages user sessions with multi-tab support and TTL-based cleanup.
@@ -55,36 +69,76 @@ func NewSessionManager(cfg *creative.Config, ttl time.Duration) *SessionManager 
 	return sm
 }
 
-// CreateTab creates a new tab in the given session for the given mode.
-// The session is created if it doesn't exist — entire operation is atomic.
+// CreateTab creates a new single-mode tab (backward-compatible wrapper).
 func (sm *SessionManager) CreateTab(sessionID, modeName string) (tabID string, err error) {
-	// Find the mode config (no lock needed — cfg is read-only after creation)
-	var modeCfg *creative.ModeConfig
-	for i := range sm.cfg.Modes {
-		if sm.cfg.Modes[i].Name == modeName {
-			modeCfg = &sm.cfg.Modes[i]
-			break
-		}
-	}
-	if modeCfg == nil {
-		return "", fmt.Errorf("mode %q not found", modeName)
+	return sm.createTabWithModes(sessionID, []string{modeName})
+}
+
+// CreateComboTab creates a new tab combining multiple modes.
+// The prompt is taken from the first mode; book folders are merged from all modes.
+func (sm *SessionManager) CreateComboTab(sessionID string, modeNames []string) (tabID string, err error) {
+	return sm.createTabWithModes(sessionID, modeNames)
+}
+
+// createTabWithModes creates a tab from one or more mode names.
+func (sm *SessionManager) createTabWithModes(sessionID string, modeNames []string) (tabID string, err error) {
+	if len(modeNames) == 0 {
+		return "", fmt.Errorf("at least one mode is required")
 	}
 
-	// Resolve prompt and create chat (I/O — no lock needed)
-	prompt := modeCfg.GetPrompt()
+	// Find all mode configs (no lock needed — cfg is read-only after creation)
+	modeCfgs := make([]*creative.ModeConfig, 0, len(modeNames))
+	for _, name := range modeNames {
+		var found *creative.ModeConfig
+		for i := range sm.cfg.Modes {
+			if sm.cfg.Modes[i].Name == name {
+				found = &sm.cfg.Modes[i]
+				break
+			}
+		}
+		if found == nil {
+			return "", fmt.Errorf("mode %q not found", name)
+		}
+		modeCfgs = append(modeCfgs, found)
+	}
+
+	// First mode provides the prompt
+	primary := modeCfgs[0]
+	prompt := primary.GetPrompt()
 	prvAI := creative.NewRouterAI(sm.cfg.Provider)
 	ch := creative.NewChat(prvAI)
 	ch.AddSystem(prompt)
 
-	ch.SetTools(creative.BookTools(modeCfg.Folders...))
+	// Merge folders from all modes (dedup)
+	folderSet := make(map[string]struct{})
+	for _, mc := range modeCfgs {
+		for _, f := range mc.Folders {
+			folderSet[f] = struct{}{}
+		}
+	}
+	mergedFolders := make([]string, 0, len(folderSet))
+	for f := range folderSet {
+		mergedFolders = append(mergedFolders, f)
+	}
+
+	ch.SetTools(creative.BookTools(mergedFolders...))
+
+	// Generate label
+	labels := make([]string, len(modeCfgs))
+	for i, mc := range modeCfgs {
+		labels[i] = mc.Label
+	}
+	label := buildComboLabel(labels)
 
 	tabID = generateID()
+	modeNamesCopy := make([]string, len(modeNames))
+	copy(modeNamesCopy, modeNames)
 	tab := &Tab{
 		ID:        tabID,
-		Mode:      modeName,
-		Label:     modeCfg.Label,
+		Modes:     modeNamesCopy,
+		Label:     label,
 		Chat:      ch,
-		Folders:   modeCfg.Folders,
+		Folders:   mergedFolders,
 		CreatedAt: time.Now(),
 	}
 
@@ -104,6 +158,21 @@ func (sm *SessionManager) CreateTab(sessionID, modeName string) (tabID string, e
 	sm.mu.Unlock()
 
 	return tabID, nil
+}
+
+// buildComboLabel joins mode labels with " | " separator.
+// If the result exceeds 45 characters, it is truncated with "…".
+func buildComboLabel(labels []string) string {
+	if len(labels) == 1 {
+		return labels[0]
+	}
+	label := strings.Join(labels, " | ")
+	runes := []rune(label)
+	if len(runes) > 45 {
+		runes = append(runes[:42], '…')
+		label = string(runes)
+	}
+	return label
 }
 
 // CloseTab closes a tab. Returns the sessionID for cleanup tracking.
@@ -148,7 +217,7 @@ func (sm *SessionManager) ListTabs(sessionID string) ([]TabInfo, error) {
 	for _, tab := range sess.Tabs {
 		infos = append(infos, TabInfo{
 			ID:    tab.ID,
-			Mode:  tab.Mode,
+			Modes: tab.Modes,
 			Label: tab.Label,
 		})
 	}

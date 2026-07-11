@@ -188,9 +188,42 @@ func handleTabsCreate(w http.ResponseWriter, r *http.Request, sm *SessionManager
 	}
 
 	sessionID := r.FormValue("session_id")
+	if sessionID == "" {
+		http.Error(w, "Missing session_id", http.StatusBadRequest)
+		return
+	}
+
+	// Check for combo modes first, then fall back to single mode
+	modesRaw := r.FormValue("modes")
+	if modesRaw != "" {
+		modeNames := strings.Split(modesRaw, ",")
+		for i := range modeNames {
+			modeNames[i] = strings.TrimSpace(modeNames[i])
+		}
+		// Filter out empty names
+		cleaned := make([]string, 0, len(modeNames))
+		for _, m := range modeNames {
+			if m != "" {
+				cleaned = append(cleaned, m)
+			}
+		}
+		if len(cleaned) == 0 {
+			http.Error(w, "Missing mode or modes", http.StatusBadRequest)
+			return
+		}
+		tabID, err := sm.CreateComboTab(sessionID, cleaned)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"tab_id": tabID})
+		return
+	}
+
 	modeName := r.FormValue("mode")
-	if sessionID == "" || modeName == "" {
-		http.Error(w, "Missing session_id or mode", http.StatusBadRequest)
+	if modeName == "" {
+		http.Error(w, "Missing mode or modes", http.StatusBadRequest)
 		return
 	}
 

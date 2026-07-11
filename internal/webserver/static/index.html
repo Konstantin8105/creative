@@ -135,6 +135,9 @@ body {
   transition: color 0.15s, border-color 0.15s;
 }
 .tab-add:hover { border-color: var(--blue); color: var(--blue); }
+.tab-add.combo { margin-left: 4px; border-color: var(--purple); color: var(--purple); }
+.tab-add.combo:hover { border-color: var(--blue); color: var(--blue); }
+.tab-btn[data-is-combo="true"].active { border-color: var(--purple); }
 
 /* ─── Chat Panels ─── */
 .chat-panels {
@@ -337,11 +340,15 @@ body {
   padding: 24px;
   min-width: 300px;
 }
+.mode-selector-modal { max-height: 80vh; overflow-y: auto; }
 .mode-selector-modal h3 { margin-bottom: 16px; color: var(--text); }
-#mode-list { max-height: 220px; overflow-y: auto; }
-#mode-list::-webkit-scrollbar { width: 6px; }
-#mode-list::-webkit-scrollbar-track { background: transparent; }
-#mode-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+#mode-list, #combo-mode-list { max-height: 220px; overflow-y: auto; }
+#mode-list::-webkit-scrollbar,
+#combo-mode-list::-webkit-scrollbar { width: 6px; }
+#mode-list::-webkit-scrollbar-track,
+#combo-mode-list::-webkit-scrollbar-track { background: transparent; }
+#mode-list::-webkit-scrollbar-thumb,
+#combo-mode-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .mode-option {
   display: block;
   width: 100%;
@@ -357,6 +364,7 @@ body {
   transition: background 0.15s, border-color 0.15s;
 }
 .mode-option:hover { background: none; border-color: var(--blue); }
+.mode-option.selected { background: var(--bg-hover); border-color: var(--blue); }
 .mode-selector-cancel {
   display: block;
   width: 100%;
@@ -417,6 +425,17 @@ body {
     </div>
   </div>
 
+  <div class="mode-selector-overlay" id="combo-mode-selector" tabindex="0">
+    <div class="mode-selector-modal">
+      <h3>Выберите режимы для комбо</h3>
+      <div id="combo-mode-list"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="mode-option" id="combo-confirm-btn" onclick="confirmComboMode()" style="text-align:center;flex:1;background:var(--blue);color:var(--on-accent);border-color:var(--blue)" disabled>Создать</button>
+        <button class="mode-selector-cancel" onclick="closeComboModeSelector()" style="flex:1">Отмена</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 (function() {
   let sessionId = sessionStorage.getItem('session_id');
@@ -427,7 +446,7 @@ body {
 
   let configModes = [];      // {name, label}[]
   let defaultMode = '';
-  let tabs = {};             // tabId → {id, mode, label, messages: [], isStreaming: false}
+  let tabs = {};             // tabId → {id, mode, modes, label, isCombo, messages: [], isStreaming: false}
   let activeTabId = null;
 
   const tabBar = document.getElementById('tab-bar');
@@ -499,7 +518,7 @@ body {
       const tabId = data.tab_id;
       const mode = configModes.find(m => m.name === modeName) || {name: modeName, label: modeName};
 
-      tabs[tabId] = { id: tabId, mode: modeName, label: mode.label, messages: [], isStreaming: false };
+      tabs[tabId] = { id: tabId, mode: modeName, modes: [modeName], label: mode.label, isCombo: false, messages: [], isStreaming: false };
 
       // Create tab button
       const btn = document.createElement('div');
@@ -593,6 +612,9 @@ body {
       return;
     }
     input.placeholder = 'Type your question... (' + tabs[activeTabId].label + ')';
+    if (tabs[activeTabId].isCombo) {
+      input.placeholder += ' (combo)';
+    }
   }
 
   // ─── Mode Selector ───
@@ -610,13 +632,116 @@ body {
   }
   window.closeModeSelector = function() { modeSelector.classList.remove('open'); };
 
-  // Add button for tab bar
+  // ─── Combo Mode Selector ───
+  const comboModeSelector = document.getElementById('combo-mode-selector');
+  const comboModeList = document.getElementById('combo-mode-list');
+  const comboConfirmBtn = document.getElementById('combo-confirm-btn');
+  let comboSelectedModes = [];
+
+  function openComboModeSelector() {
+    comboModeList.innerHTML = '';
+    comboSelectedModes = [];
+    comboConfirmBtn.disabled = true;
+    configModes.forEach(m => {
+      const btn = document.createElement('button');
+      btn.className = 'mode-option';
+      btn.textContent = m.label;
+      btn.onclick = () => {
+        const idx = comboSelectedModes.indexOf(m.name);
+        if (idx === -1) {
+          comboSelectedModes.push(m.name);
+          btn.classList.add('selected');
+        } else {
+          comboSelectedModes.splice(idx, 1);
+          btn.classList.remove('selected');
+        }
+        comboConfirmBtn.disabled = comboSelectedModes.length === 0;
+      };
+      comboModeList.appendChild(btn);
+    });
+    comboModeSelector.classList.add('open');
+    comboModeSelector.focus();
+  }
+  window.closeComboModeSelector = function() { comboModeSelector.classList.remove('open'); };
+
+  function confirmComboMode() {
+    if (comboSelectedModes.length === 0) return;
+    closeComboModeSelector();
+    createComboTab(comboSelectedModes);
+  }
+  window.confirmComboMode = confirmComboMode;
+
+  comboModeSelector.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeComboModeSelector();
+  });
+
+  function createComboTab(modeNames) {
+    if (!modeNames || modeNames.length === 0) return;
+
+    fetch('/api/tabs/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ session_id: sessionId, modes: modeNames.join(',') })
+    })
+    .then(r => {
+      if (r.status === 410) { handleSessionExpired(); return null; }
+      return r.json();
+    })
+    .then(data => {
+      if (!data || !data.tab_id) return;
+
+      const tabId = data.tab_id;
+      const label = buildComboTabLabel(modeNames);
+
+      tabs[tabId] = { id: tabId, mode: modeNames[0], modes: modeNames, label: label, isCombo: true, messages: [], isStreaming: false };
+
+      const btn = document.createElement('div');
+      btn.className = 'tab-btn';
+      btn.dataset.tabId = tabId;
+      btn.dataset.isCombo = 'true';
+      btn.innerHTML = `<span>⊕ ${escapeHtml(label)}</span><span class="tab-close" onclick="event.stopPropagation(); window._closeTab('${tabId}')">×</span>`;
+      btn.onclick = () => switchTab(tabId);
+
+      const addBtn = tabBar.querySelector('.tab-add');
+      tabBar.insertBefore(btn, addBtn);
+
+      const panel = document.createElement('div');
+      panel.className = 'chat-panel';
+      panel.id = 'panel-' + tabId;
+      panel.innerHTML = '<div class="chat-messages"></div>';
+      chatPanels.appendChild(panel);
+
+      switchTab(tabId);
+      input.focus();
+    });
+  }
+
+  function buildComboTabLabel(modeNames) {
+    const labels = modeNames.map(n => {
+      const m = configModes.find(cm => cm.name === n);
+      return m ? m.label : n;
+    });
+    let label = labels.join(' | ');
+    if (label.length > 45) {
+      label = label.slice(0, 42) + '…';
+    }
+    return label;
+  }
+
+  // Add buttons for tab bar
   const addBtn = document.createElement('div');
   addBtn.className = 'tab-add';
   addBtn.textContent = '+';
   addBtn.onclick = openModeSelector;
   addBtn.title = 'Add tab';
   tabBar.appendChild(addBtn);
+
+  const comboAddBtn = document.createElement('div');
+  comboAddBtn.className = 'tab-add combo';
+  comboAddBtn.textContent = '⊕';
+  comboAddBtn.onclick = openComboModeSelector;
+  comboAddBtn.title = 'Add combo tab';
+  tabBar.appendChild(comboAddBtn);
 
   // ─── Send Message ───
 
