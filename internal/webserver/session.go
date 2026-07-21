@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ type Tab struct {
 	Label     string
 	Chat      *creative.Chat
 	Folders   []string
+	TempDir   string
 	CreatedAt time.Time
 }
 
@@ -121,7 +123,22 @@ func (sm *SessionManager) createTabWithModes(sessionID string, modeNames []strin
 		mergedFolders = append(mergedFolders, f)
 	}
 
-	ch.SetTools(creative.BookTools(mergedFolders...))
+	tabID = generateID()
+
+	// Create temp directory for list files
+	tempDir, err := os.MkdirTemp("", "creative-lists-*")
+	if err != nil {
+		return "", fmt.Errorf("cannot create temp dir: %w", err)
+	}
+
+	// Add temp dir to book folders so BookTools can see list files
+	mergedFolders = append(mergedFolders, tempDir)
+
+	allTools := append(
+		creative.BookTools(mergedFolders...),
+		creative.ListAddTool(tempDir)...,
+	)
+	ch.SetTools(allTools)
 
 	// Generate label
 	labels := make([]string, len(modeCfgs))
@@ -130,7 +147,6 @@ func (sm *SessionManager) createTabWithModes(sessionID string, modeNames []strin
 	}
 	label := buildComboLabel(labels)
 
-	tabID = generateID()
 	modeNamesCopy := make([]string, len(modeNames))
 	copy(modeNamesCopy, modeNames)
 	tab := &Tab{
@@ -139,6 +155,7 @@ func (sm *SessionManager) createTabWithModes(sessionID string, modeNames []strin
 		Label:     label,
 		Chat:      ch,
 		Folders:   mergedFolders,
+		TempDir:   tempDir,
 		CreatedAt: time.Now(),
 	}
 
@@ -185,12 +202,22 @@ func (sm *SessionManager) CloseTab(sessionID, tabID string) error {
 		return fmt.Errorf("session not found")
 	}
 
-	if _, ok := sess.Tabs[tabID]; !ok {
+	tab, ok := sess.Tabs[tabID]
+	if !ok {
 		return fmt.Errorf("tab not found")
 	}
 
+	tempDir := tab.TempDir
+
 	delete(sess.Tabs, tabID)
 	sess.LastActivity = time.Now()
+
+	// Clean up temp directory for list files
+	if tempDir != "" {
+		if err := os.RemoveAll(tempDir); err != nil {
+			log.Printf("[session] cleanup temp dir %s: %v", tempDir, err)
+		}
+	}
 
 	// If no tabs left, delete the session
 	if len(sess.Tabs) == 0 {
@@ -283,6 +310,14 @@ func (sm *SessionManager) cleanup() {
 	now := time.Now()
 	for id, s := range sm.sessions {
 		if now.Sub(s.LastActivity) > sm.ttl {
+			// Clean up temp dirs for all tabs in this session
+			for _, tab := range s.Tabs {
+				if tab.TempDir != "" {
+					if err := os.RemoveAll(tab.TempDir); err != nil {
+						log.Printf("[session] cleanup temp dir %s: %v", tab.TempDir, err)
+					}
+				}
+			}
 			delete(sm.sessions, id)
 			log.Printf("[session] expired: %s (age: %v, inactive: %v)",
 				id[:min(len(id), 8)], now.Sub(s.CreatedAt), now.Sub(s.LastActivity))

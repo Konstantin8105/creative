@@ -10,9 +10,10 @@ type ToolParameters struct {
 
 // ToolProperty defines a single parameter property in JSON Schema.
 type ToolProperty struct {
-	Type        string   `json:"type"` // string, number, integer, boolean, array
-	Description string   `json:"description,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
+	Type        string        `json:"type"` // string, number, integer, boolean, array
+	Description string        `json:"description,omitempty"`
+	Enum        []string      `json:"enum,omitempty"`
+	Items       *ToolProperty `json:"items,omitempty"` // for type="array"
 }
 
 // Tool represents a callable function that the AI can invoke.
