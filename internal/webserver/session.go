@@ -277,6 +277,17 @@ func (sm *SessionManager) CloseSession(sessionID string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	log.Printf("[session] CloseSession: %s", sessionID)
+
+	sess, ok := sm.sessions[sessionID]
+	if ok {
+		for _, tab := range sess.Tabs {
+			if tab.TempDir != "" {
+				if err := os.RemoveAll(tab.TempDir); err != nil {
+					log.Printf("[session] cleanup temp dir %s: %v", tab.TempDir, err)
+				}
+			}
+		}
+	}
 	delete(sm.sessions, sessionID)
 }
 

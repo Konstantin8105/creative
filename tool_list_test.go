@@ -106,11 +106,9 @@ func TestListAdd_NameWithSpaces(t *testing.T) {
 
 	tool.Execute(`{"name": "my tasks", "items": ["item1"]}`)
 
-	info, err := os.Stat(filepath.Join(tempDir, "_list_my_tasks.txt"))
-	if err != nil {
-		t.Fatal("expected file 'my_tasks.txt'")
+	if _, err := os.Stat(filepath.Join(tempDir, "_list_my_tasks.txt")); err != nil {
+		t.Fatal("expected file '_list_my_tasks.txt'")
 	}
-	_ = info
 }
 
 func TestListAdd_NameWithPathTraversal(t *testing.T) {
