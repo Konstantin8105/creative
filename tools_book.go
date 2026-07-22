@@ -139,8 +139,11 @@ func getFiles(folders []string) (files [][2]string, err error) {
 			return
 		}
 		var info os.FileInfo
-		info, err = os.Stat(folder)
-		if err != nil {
+		info, statErr := os.Stat(folder)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				continue // папка будет создана позже (lazy)
+			}
 			err = fmt.Errorf("Ошибка: папка %q не найдена.", folder)
 			return
 		}

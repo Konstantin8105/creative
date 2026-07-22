@@ -21,13 +21,13 @@ func ListAddTool(tempDir string) []Tool {
 	return []Tool{
 		{
 			Name:        "list_add",
-			Description: "Add lines to a named list. Lists are stored as \"_list_<name>.txt\" files and can be browsed/searched via list_books, read_book_lines, search_in_book, search_stats using the filename \"_list_<name>.txt\". Example: list_add name=\"tasks\" creates file \"_list_tasks.txt\".",
+			Description: "Add lines to a named list. The list name is lowercased, so the resulting file is always \"_list_<lowercase_name>.txt\". After adding, the list can be browsed/searched via list_books, read_book_lines, search_in_book, search_stats using that lowercase filename. Example: list_add name=\"Tasks\" creates file \"_list_tasks.txt\". The response includes the actual filename.",
 			Parameters: &ToolParameters{
 				Type: "object",
 				Properties: map[string]ToolProperty{
 					"name": {
 						Type:        "string",
-						Description: "List name. Case-insensitive, spaces become underscores. The actual file is stored as \"_list_<name>.txt\". Invalid filename characters cause an error.",
+						Description: "List name. Case-insensitive (converted to lowercase). Spaces become underscores. The actual filename is \"_list_<lowercase_name>.txt\". Invalid filename characters cause an error.",
 					},
 					"items": {
 						Type:        "array",
@@ -97,7 +97,8 @@ func listAddExecute(tempDir string, params string) string {
 	if len(cleaned) != 1 {
 		plural = "s"
 	}
-	return fmt.Sprintf("Added %d line%s to list %q.", len(cleaned), plural, p.Name)
+	filename := listFilePrefix + safeName + ".txt"
+	return fmt.Sprintf("Added %d line%s to list %q. File: %s", len(cleaned), plural, p.Name, filename)
 }
 
 func sanitizeListName(name string) (string, error) {

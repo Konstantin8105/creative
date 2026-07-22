@@ -23,6 +23,9 @@ func TestListAdd_AddLines(t *testing.T) {
 	if !strings.Contains(result, "Added 2 lines") {
 		t.Errorf("unexpected result: %s", result)
 	}
+	if !strings.Contains(result, "File: _list_mylist.txt") {
+		t.Errorf("result should contain filename, got: %s", result)
+	}
 
 	data, err := os.ReadFile(filepath.Join(tempDir, "_list_mylist.txt"))
 	if err != nil {

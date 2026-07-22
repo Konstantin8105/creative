@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -125,11 +126,8 @@ func (sm *SessionManager) createTabWithModes(sessionID string, modeNames []strin
 
 	tabID = generateID()
 
-	// Create temp directory for list files
-	tempDir, err := os.MkdirTemp("", "creative-lists-*")
-	if err != nil {
-		return "", fmt.Errorf("cannot create temp dir: %w", err)
-	}
+	// Compute temp directory path for list files (not created yet — lazy)
+	tempDir := filepath.Join(os.TempDir(), "creative-lists", tabID)
 
 	// Add temp dir to book folders so BookTools can see list files
 	mergedFolders = append(mergedFolders, tempDir)
@@ -202,22 +200,12 @@ func (sm *SessionManager) CloseTab(sessionID, tabID string) error {
 		return fmt.Errorf("session not found")
 	}
 
-	tab, ok := sess.Tabs[tabID]
-	if !ok {
+	if _, ok := sess.Tabs[tabID]; !ok {
 		return fmt.Errorf("tab not found")
 	}
 
-	tempDir := tab.TempDir
-
 	delete(sess.Tabs, tabID)
 	sess.LastActivity = time.Now()
-
-	// Clean up temp directory for list files
-	if tempDir != "" {
-		if err := os.RemoveAll(tempDir); err != nil {
-			log.Printf("[session] cleanup temp dir %s: %v", tempDir, err)
-		}
-	}
 
 	// If no tabs left, delete the session
 	if len(sess.Tabs) == 0 {
@@ -277,17 +265,6 @@ func (sm *SessionManager) CloseSession(sessionID string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	log.Printf("[session] CloseSession: %s", sessionID)
-
-	sess, ok := sm.sessions[sessionID]
-	if ok {
-		for _, tab := range sess.Tabs {
-			if tab.TempDir != "" {
-				if err := os.RemoveAll(tab.TempDir); err != nil {
-					log.Printf("[session] cleanup temp dir %s: %v", tab.TempDir, err)
-				}
-			}
-		}
-	}
 	delete(sm.sessions, sessionID)
 }
 
@@ -321,14 +298,6 @@ func (sm *SessionManager) cleanup() {
 	now := time.Now()
 	for id, s := range sm.sessions {
 		if now.Sub(s.LastActivity) > sm.ttl {
-			// Clean up temp dirs for all tabs in this session
-			for _, tab := range s.Tabs {
-				if tab.TempDir != "" {
-					if err := os.RemoveAll(tab.TempDir); err != nil {
-						log.Printf("[session] cleanup temp dir %s: %v", tab.TempDir, err)
-					}
-				}
-			}
 			delete(sm.sessions, id)
 			log.Printf("[session] expired: %s (age: %v, inactive: %v)",
 				id[:min(len(id), 8)], now.Sub(s.CreatedAt), now.Sub(s.LastActivity))
