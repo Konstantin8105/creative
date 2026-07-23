@@ -233,6 +233,36 @@ body {
 .tool-notice .name { color: var(--yellow); font-weight: 600; }
 .tool-notice .result-preview { color: var(--text); white-space: normal; word-break: break-word; }
 .tool-notice > span:last-child { min-width: 0; }
+.tools-collapsible {
+  margin: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+.tools-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  transition: background 0.15s;
+}
+.tools-header:hover { background: var(--bg-hover); color: var(--text); }
+.tools-arrow { font-size: 10px; transition: transform 0.2s; }
+.tools-label { font-weight: 600; flex: 1; }
+.tools-count {
+  font-size: 11px;
+  background: var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0 6px;
+  line-height: 1.6;
+}
 .tools-container { display: flex; flex-direction: column; }
 
 .info-notice {
@@ -397,7 +427,7 @@ body {
   .chat-messages { overflow: visible; height: auto; max-height: none; }
   .message .bubble { max-width: 100%; }
   .copy-btn, .msg-elapsed, .typing-indicator,
-  .tools-container, .reasoning-toggle { display: none; }
+  .tools-collapsible, .reasoning-toggle { display: none; }
   .reasoning-content { display: block; }
 }
 </style>
@@ -762,7 +792,7 @@ body {
 
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message assistant';
-    msgDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="tools-container"></div><div class="streaming-text" style="display:none"></div><div class="rendered-content"></div><div class="typing-indicator active"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
+    msgDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="tools-collapsible open" data-user-collapsed="false"><div class="tools-header" onclick="toggleTools(this)"><span class="tools-arrow">▼</span><span class="tools-label">Инструменты</span><span class="tools-count">0</span></div><div class="tools-container"></div></div><div class="streaming-text" style="display:none"></div><div class="rendered-content"></div><div class="typing-indicator active"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
     msgContainer.appendChild(msgDiv);
     msgDiv.dataset.requestTime = Date.now();
 
@@ -872,7 +902,7 @@ body {
         const tnotice = document.createElement('div');
         tnotice.className = 'tool-notice';
         tnotice.innerHTML = '<span class="icon">🔧</span><span>Tool: <span class="name">' + escapeHtml(tname) + '</span>(<span class="result-preview">' + escapeHtml(truncate(targs)) + '</span>)</span>';
-        bubble.querySelector('.tools-container').appendChild(tnotice);
+        appendToolsNotice(bubble, tnotice);
         scrollToBottom(tabId);
         break;
 
@@ -882,7 +912,7 @@ body {
         const rnotice = document.createElement('div');
         rnotice.className = 'tool-notice';
         rnotice.innerHTML = '<span class="icon">✅</span><span><span class="name">' + escapeHtml(rname) + '</span> → <span class="result-preview">' + escapeHtml(truncate(result)) + '</span></span>';
-        bubble.querySelector('.tools-container').appendChild(rnotice);
+        appendToolsNotice(bubble, rnotice);
         scrollToBottom(tabId);
         break;
 
@@ -892,7 +922,7 @@ body {
         const infoNotice = document.createElement('div');
         infoNotice.className = 'info-notice';
         infoNotice.innerHTML = '<span class="icon">ℹ️</span><span><span class="info-type">' + escapeHtml(infoType) + '</span>: <span class="info-message">' + escapeHtml(infoMessage) + '</span></span>';
-        bubble.querySelector('.tools-container').appendChild(infoNotice);
+        appendToolsNotice(bubble, infoNotice);
         scrollToBottom(tabId);
         break;
 
@@ -969,6 +999,41 @@ body {
     el.classList.toggle('open');
     const content = el.nextElementSibling;
     if (content) content.style.display = content.style.display === 'none' ? 'block' : 'none';
+  };
+
+  function appendToolsNotice(bubble, el) {
+    const container = bubble.querySelector('.tools-container');
+    if (!container) return;
+    container.appendChild(el);
+    const collapsible = container.closest('.tools-collapsible');
+    if (!collapsible) return;
+    const countEl = collapsible.querySelector('.tools-count');
+    if (countEl) countEl.textContent = container.children.length;
+    if (collapsible.dataset.userCollapsed !== 'true') {
+      collapsible.classList.add('open');
+      container.style.display = '';
+      const arrow = collapsible.querySelector('.tools-arrow');
+      if (arrow) arrow.textContent = '▼';
+    }
+  }
+
+  window.toggleTools = function(header) {
+    const collapsible = header.closest('.tools-collapsible');
+    if (!collapsible) return;
+    const container = collapsible.querySelector('.tools-container');
+    const arrow = collapsible.querySelector('.tools-arrow');
+    const isOpen = collapsible.classList.contains('open');
+    if (isOpen) {
+      collapsible.classList.remove('open');
+      container.style.display = 'none';
+      arrow.textContent = '▶';
+      collapsible.dataset.userCollapsed = 'true';
+    } else {
+      collapsible.classList.add('open');
+      container.style.display = '';
+      arrow.textContent = '▼';
+      collapsible.dataset.userCollapsed = 'false';
+    }
   };
 
   function removeTypingIndicator(msgDiv) {
