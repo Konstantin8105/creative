@@ -263,6 +263,19 @@ body {
   padding: 0 6px;
   line-height: 1.6;
 }
+.tools-spinner {
+  display: none;
+  font-size: 12px;
+  line-height: 1;
+  font-family: monospace;
+  color: var(--blue);
+  width: 1.2em;
+  text-align: center;
+  flex-shrink: 0;
+}
+.tools-collapsible.streaming .tools-spinner {
+  display: inline-block;
+}
 .tools-container { display: flex; flex-direction: column; }
 
 .info-notice {
@@ -476,6 +489,18 @@ body {
 
   let configModes = [];      // {name, label}[]
   let defaultMode = '';
+  // ─── Spinner patterns ───
+  const SPINNER_PATTERNS = {
+    circle: ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'],
+    snake: ['⠁','⠂','⠄','⡀','⢀','⠠','⠐','⠈'],
+    dna: ['⠋','⠙','⠚','⠞','⠖','⠦','⠴','⠲','⠖','⠓'],
+    pingpong: ['⢄','⢂','⢁','⡁','⡈','⡐','⡠','⡀','⢀','⠠','⠐','⠈'],
+    pulse: ['⠔','⠢','⠔','⠒','⠤','⠦','⠖','⠷','⡿','⣿'],
+    matrix: ['⠡','⠴','⢎','⡕','⢀','⣧','⢏','⡊','⠵','⣄'],
+    rain: ['⠉','⠒','⠤','⣀','⠤','⠒','⠉'],
+  };
+  const SPINNER_DEFAULT = 'circle';
+  const SPINNER_INTERVAL_MS = 80;
   let tabs = {};             // tabId → {id, mode, modes, label, isCombo, messages: [], isStreaming: false}
   let activeTabId = null;
 
@@ -792,7 +817,7 @@ body {
 
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message assistant';
-    msgDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="tools-collapsible open" data-user-collapsed="false"><div class="tools-header" onclick="toggleTools(this)"><span class="tools-arrow">▼</span><span class="tools-label">Инструменты</span><span class="tools-count">0</span></div><div class="tools-container"></div></div><div class="streaming-text" style="display:none"></div><div class="rendered-content"></div><div class="typing-indicator active"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
+    msgDiv.innerHTML = '<div class="avatar">🤖</div><div class="bubble"><div class="tools-collapsible open streaming" data-user-collapsed="false"><div class="tools-header" onclick="toggleTools(this)"><span class="tools-arrow">▼</span><span class="tools-spinner"></span><span class="tools-label">Инструменты</span><span class="tools-count">0</span></div><div class="tools-container"></div></div><div class="streaming-text" style="display:none"></div><div class="rendered-content"></div><div class="typing-indicator active"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
     msgContainer.appendChild(msgDiv);
     msgDiv.dataset.requestTime = Date.now();
 
@@ -802,6 +827,8 @@ body {
 
     const bubble = msgDiv.querySelector('.bubble');
     const renderedContentDiv = msgDiv.querySelector('.rendered-content');
+    const tcInit = bubble.querySelector('.tools-collapsible');
+    if (tcInit) startToolsSpinner(tcInit);
     let currentEvent = '';
 
     try {
@@ -928,6 +955,8 @@ body {
 
       case 'done':
         removeTypingIndicator(msgDiv);
+        const tc = bubble.querySelector('.tools-collapsible');
+        if (tc) { stopToolsSpinner(tc); tc.classList.remove('streaming'); }
 
         const stDiv = bubble.querySelector('.streaming-text');
         if (stDiv) { stDiv.style.display = 'none'; stDiv.textContent = ''; }
@@ -1015,6 +1044,29 @@ body {
       const arrow = collapsible.querySelector('.tools-arrow');
       if (arrow) arrow.textContent = '▼';
     }
+  }
+
+  function startToolsSpinner(collapsible) {
+    const pattern = SPINNER_PATTERNS[SPINNER_DEFAULT];
+    const el = collapsible.querySelector('.tools-spinner');
+    if (!el) return;
+    let idx = 0;
+    el.textContent = pattern[idx];
+    const intervalId = setInterval(() => {
+      idx = (idx + 1) % pattern.length;
+      el.textContent = pattern[idx];
+    }, SPINNER_INTERVAL_MS);
+    collapsible.dataset.spinnerInterval = intervalId;
+  }
+
+  function stopToolsSpinner(collapsible) {
+    const intervalId = parseInt(collapsible.dataset.spinnerInterval);
+    if (intervalId) {
+      clearInterval(intervalId);
+      delete collapsible.dataset.spinnerInterval;
+    }
+    const el = collapsible.querySelector('.tools-spinner');
+    if (el) el.textContent = '';
   }
 
   window.toggleTools = function(header) {
