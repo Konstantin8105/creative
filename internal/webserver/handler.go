@@ -127,13 +127,6 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		})
 	}
 
-	defer func() {
-		if r := recover(); r != nil {
-			errHTML := renderMarkdown(fmt.Sprintf("⚠️ **Internal Error:**\n\n```\n%v\n```", r))
-			sendDone(errHTML, "")
-		}
-	}()
-
 	chat.SetCallback(&creative.ChatEventCallback{
 		OnStreamChunk: func(chunk string) {
 			fullContent.WriteString(chunk)
@@ -177,7 +170,9 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 
 	// Save history after every response (even on error with partial content)
 	if tab.History != nil {
-		tab.History.Save(chat.GetHistory())
+		if saveErr := tab.History.Save(chat.GetHistory()); saveErr != nil {
+			log.Printf("Error saving history [tab=%s]: %v", tabID, saveErr)
+		}
 	}
 
 	if err != nil {

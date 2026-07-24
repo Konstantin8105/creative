@@ -301,7 +301,7 @@ func TestConcurrentTabs(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			_, err := 		sm.CreateTab("concurrent", "test", "")
+			_, err := sm.CreateTab("concurrent", "test", "")
 			if err != nil {
 				t.Errorf("CreateTab: %v", err)
 			}

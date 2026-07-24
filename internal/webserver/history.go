@@ -62,8 +62,3 @@ func (hw *HistoryWriter) Save(messages []creative.ChatMessage) error {
 	}
 	return os.WriteFile(hw.filePath, data, 0644)
 }
-
-// FilePath returns the target file path. Used for logging.
-func (hw *HistoryWriter) FilePath() string {
-	return hw.filePath
-}
