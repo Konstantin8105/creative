@@ -137,6 +137,9 @@ func (ch *Chat) Send(input string, isChat bool) (responce string, err error) {
 		hashBytes := md5.Sum([]byte(input))
 		md5String := hex.EncodeToString(hashBytes[:])
 		log.Printf("[chat] %s", md5String)
+		if len(ch.msgs) <= 1 {
+			log.Printf("[chat] first: %q | md5=%s", input, md5String)
+		}
 	}
 
 	assistantMsg, err := ch.prv.SendStream(ch.msgs, isChat, nil, ch.Tools)
@@ -159,6 +162,11 @@ func (ch *Chat) Send(input string, isChat bool) (responce string, err error) {
 		responce = strings.TrimSpace(assistantMsg.Content)
 	}
 	return
+}
+
+// GetHistory returns the full message history for this chat session.
+func (ch *Chat) GetHistory() []ChatMessage {
+	return ch.msgs
 }
 
 // isTransientError returns true if the error is likely a transient server issue
@@ -268,11 +276,12 @@ func (ch *Chat) SendStream(input string, isChat bool) (response string, err erro
 	)
 
 	if LoggingEnabled {
-		// Вычисляем MD5, получаем [16]byte
 		hashBytes := md5.Sum([]byte(input))
-		// Преобразуем в hex-строку (длина 32 символа)
 		md5String := hex.EncodeToString(hashBytes[:])
 		log.Printf("[chat] %s", md5String)
+		if len(ch.msgs) <= 1 {
+			log.Printf("[chat] first: %q | md5=%s", input, md5String)
+		}
 	}
 
 	assistantMsg, err := ch.retrySendStream(isChat, ch.streamCallback())

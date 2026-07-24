@@ -20,6 +20,7 @@ func main() {
 		configPath = flag.String("config", "", "Path to configuration JSON file (required)")
 		port       = flag.String("port", "2345", "Web server port (used with -web)")
 		help       = flag.Bool("help", false, "Show help")
+		history    = flag.Bool("history", true, "Save chat history to files (default: true)")
 	)
 
 	flag.Usage = func() {
@@ -44,7 +45,7 @@ func main() {
 	}
 
 	// Web mode: start HTTP server
-	webserver.Start(cfg, *port)
+	webserver.Start(cfg, *port, *history)
 }
 
 func configHelpText() string {
@@ -89,5 +90,7 @@ Flags:
         Path to configuration JSON file (required)
   -port string
         Web server port (default "2345")
+  -history
+        Save chat history to files (default true)
 `, string(data))
 }

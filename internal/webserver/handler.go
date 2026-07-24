@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -15,6 +16,40 @@ import (
 
 //go:embed static/index.html
 var indexHTML []byte
+
+// recoverMiddleware wraps an HTTP handler to recover from panics.
+// Instead of crashing the server, it logs the panic and returns 500.
+func recoverMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("PANIC [%s %s]: %v", r.Method, r.URL.Path, rec)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{"error": "internal_server_error"})
+			}
+		}()
+		next(w, r)
+	}
+}
+
+// getClientIP extracts the client IP address from the request.
+// It checks X-Forwarded-For (for reverse proxies), then X-Real-IP,
+// then falls back to RemoteAddr.
+func getClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
 
 func sseEvent(w http.ResponseWriter, flusher http.Flusher, event string, data string) {
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
@@ -47,8 +82,8 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		return
 	}
 
-	// Get chat for this tab — check before writing SSE headers
-	chat, err := sm.GetChat(sessionID, tabID)
+	// Get tab for this session — check before writing SSE headers
+	tab, err := sm.GetTab(sessionID, tabID)
 	if err != nil {
 		status := http.StatusBadRequest
 		msg := err.Error()
@@ -64,6 +99,8 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "not_found", "message": msg})
 		return
 	}
+
+	chat := tab.Chat
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -137,6 +174,12 @@ func handleChat(w http.ResponseWriter, r *http.Request, sm *SessionManager) {
 	})
 
 	_, err = chat.SendStream(message, true)
+
+	// Save history after every response (even on error with partial content)
+	if tab.History != nil {
+		tab.History.Save(chat.GetHistory())
+	}
+
 	if err != nil {
 		partialContent := strings.TrimSpace(fullContent.String())
 		partialReasoning := strings.TrimSpace(fullReasoning.String())
@@ -193,6 +236,8 @@ func handleTabsCreate(w http.ResponseWriter, r *http.Request, sm *SessionManager
 		return
 	}
 
+	clientIP := getClientIP(r)
+
 	// Check for combo modes first, then fall back to single mode
 	modesRaw := r.FormValue("modes")
 	if modesRaw != "" {
@@ -211,7 +256,7 @@ func handleTabsCreate(w http.ResponseWriter, r *http.Request, sm *SessionManager
 			http.Error(w, "Missing mode or modes", http.StatusBadRequest)
 			return
 		}
-		tabID, err := sm.CreateComboTab(sessionID, cleaned)
+		tabID, err := sm.CreateComboTab(sessionID, cleaned, clientIP)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -227,7 +272,7 @@ func handleTabsCreate(w http.ResponseWriter, r *http.Request, sm *SessionManager
 		return
 	}
 
-	tabID, err := sm.CreateTab(sessionID, modeName)
+	tabID, err := sm.CreateTab(sessionID, modeName, clientIP)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

@@ -1,9 +1,9 @@
 package webserver
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +22,7 @@ type Tab struct {
 	Folders   []string
 	TempDir   string
 	CreatedAt time.Time
+	History   *HistoryWriter
 }
 
 // PrimaryMode returns the first mode name.
@@ -53,38 +54,40 @@ type TabInfo struct {
 
 // SessionManager manages user sessions with multi-tab support and TTL-based cleanup.
 type SessionManager struct {
-	mu       sync.RWMutex
-	sessions map[string]*Session
-	cfg      *creative.Config
-	ttl      time.Duration
-	stopCh   chan struct{}
+	mu             sync.RWMutex
+	sessions       map[string]*Session
+	cfg            *creative.Config
+	ttl            time.Duration
+	stopCh         chan struct{}
+	historyEnabled bool
 }
 
 // NewSessionManager creates a new SessionManager.
-func NewSessionManager(cfg *creative.Config, ttl time.Duration) *SessionManager {
+func NewSessionManager(cfg *creative.Config, ttl time.Duration, historyEnabled bool) *SessionManager {
 	sm := &SessionManager{
-		sessions: make(map[string]*Session),
-		cfg:      cfg,
-		ttl:      ttl,
-		stopCh:   make(chan struct{}),
+		sessions:       make(map[string]*Session),
+		cfg:            cfg,
+		ttl:            ttl,
+		stopCh:         make(chan struct{}),
+		historyEnabled: historyEnabled,
 	}
 	go sm.cleanupLoop()
 	return sm
 }
 
 // CreateTab creates a new single-mode tab (backward-compatible wrapper).
-func (sm *SessionManager) CreateTab(sessionID, modeName string) (tabID string, err error) {
-	return sm.createTabWithModes(sessionID, []string{modeName})
+func (sm *SessionManager) CreateTab(sessionID, modeName, clientIP string) (tabID string, err error) {
+	return sm.createTabWithModes(sessionID, []string{modeName}, clientIP)
 }
 
 // CreateComboTab creates a new tab combining multiple modes.
 // The prompt is taken from the first mode; book folders are merged from all modes.
-func (sm *SessionManager) CreateComboTab(sessionID string, modeNames []string) (tabID string, err error) {
-	return sm.createTabWithModes(sessionID, modeNames)
+func (sm *SessionManager) CreateComboTab(sessionID string, modeNames []string, clientIP string) (tabID string, err error) {
+	return sm.createTabWithModes(sessionID, modeNames, clientIP)
 }
 
 // createTabWithModes creates a tab from one or more mode names.
-func (sm *SessionManager) createTabWithModes(sessionID string, modeNames []string) (tabID string, err error) {
+func (sm *SessionManager) createTabWithModes(sessionID string, modeNames []string, clientIP string) (tabID string, err error) {
 	if len(modeNames) == 0 {
 		return "", fmt.Errorf("at least one mode is required")
 	}
@@ -155,6 +158,7 @@ func (sm *SessionManager) createTabWithModes(sessionID string, modeNames []strin
 		Folders:   mergedFolders,
 		TempDir:   tempDir,
 		CreatedAt: time.Now(),
+		History:   NewHistoryWriter(clientIP, sessionID, tabID, sm.historyEnabled),
 	}
 
 	// One lock acquisition for session lookup/create + tab insertion
@@ -260,6 +264,26 @@ func (sm *SessionManager) GetChat(sessionID, tabID string) (*creative.Chat, erro
 	return tab.Chat, nil
 }
 
+// GetTab returns the tab for a specific session and tab ID.
+func (sm *SessionManager) GetTab(sessionID, tabID string) (*Tab, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	sess, ok := sm.sessions[sessionID]
+	if !ok {
+		return nil, fmt.Errorf("session not found")
+	}
+
+	tab, ok := sess.Tabs[tabID]
+	if !ok {
+		return nil, fmt.Errorf("tab not found")
+	}
+
+	sess.LastActivity = time.Now()
+
+	return tab, nil
+}
+
 // CloseSession immediately removes a session.
 func (sm *SessionManager) CloseSession(sessionID string) {
 	sm.mu.Lock()
@@ -311,10 +335,10 @@ func (sm *SessionManager) Stop() {
 }
 
 func generateID() string {
-	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, 8)
-	for i := range b {
-		b[i] = chars[rand.Intn(len(chars))]
+	ts := time.Now().UnixNano()
+	rb := make([]byte, 8)
+	if _, err := rand.Read(rb); err != nil {
+		panic(fmt.Errorf("generateID: %w", err))
 	}
-	return string(b)
+	return fmt.Sprintf("%016x%016x", ts, rb)
 }

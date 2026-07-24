@@ -80,7 +80,7 @@ func newTestConfig(t *testing.T) *creative.Config {
 
 func TestNewSessionManager(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	if sm == nil {
 		t.Fatal("NewSessionManager returned nil")
 	}
@@ -89,11 +89,11 @@ func TestNewSessionManager(t *testing.T) {
 
 func TestTabCreateAndList(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
 	// Create tabs in different sessions
-	tab1, err := sm.CreateTab("session_1", "test")
+	tab1, err := sm.CreateTab("session_1", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestTabCreateAndList(t *testing.T) {
 	}
 
 	// Second tab in same session
-	tab2, err := sm.CreateTab("session_1", "test")
+	tab2, err := sm.CreateTab("session_1", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestTabCreateAndList(t *testing.T) {
 	}
 
 	// Tab in different session
-	tab3, err := sm.CreateTab("session_2", "test")
+	tab3, err := sm.CreateTab("session_2", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestTabCreateAndList(t *testing.T) {
 
 func TestListTabs_SessionNotFound(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
 	_, err := sm.ListTabs("nonexistent")
@@ -148,10 +148,10 @@ func TestListTabs_SessionNotFound(t *testing.T) {
 
 func TestCreateTab(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
-	tabID, err := sm.CreateTab("session_a", "test")
+	tabID, err := sm.CreateTab("session_a", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,10 +174,10 @@ func TestCreateTab(t *testing.T) {
 
 func TestCreateTab_UnknownMode(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
-	_, err := sm.CreateTab("session_b", "nonexistent")
+	_, err := sm.CreateTab("session_b", "nonexistent", "")
 	if err == nil {
 		t.Fatal("expected error for unknown mode")
 	}
@@ -185,10 +185,10 @@ func TestCreateTab_UnknownMode(t *testing.T) {
 
 func TestCloseTab(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
-	tabID, err := sm.CreateTab("session_c", "test")
+	tabID, err := sm.CreateTab("session_c", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestCloseTab(t *testing.T) {
 
 func TestCloseTab_NotFound(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
 	if err := sm.CloseTab("nonexistent", "tab_x"); err == nil {
@@ -217,10 +217,10 @@ func TestCloseTab_NotFound(t *testing.T) {
 
 func TestGetChat(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
-	tabID, err := sm.CreateTab("session_d", "test")
+	tabID, err := sm.CreateTab("session_d", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestGetChat(t *testing.T) {
 
 func TestGetChat_SessionNotFound(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
 	_, err := sm.GetChat("nonexistent", "tab_x")
@@ -247,11 +247,11 @@ func TestGetChat_SessionNotFound(t *testing.T) {
 
 func TestHeartbeat(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
 	// Create a tab to establish session
-	_, err := sm.CreateTab("session_e", "test")
+	_, err := sm.CreateTab("session_e", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,11 +271,11 @@ func TestHeartbeat(t *testing.T) {
 
 func TestCloseSession(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
 	// Create a tab to establish session
-	_, err := sm.CreateTab("session_f", "test")
+	_, err := sm.CreateTab("session_f", "test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestCloseSession(t *testing.T) {
 
 func TestConcurrentTabs(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
 	const n = 20
@@ -301,7 +301,7 @@ func TestConcurrentTabs(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			_, err := sm.CreateTab("concurrent", "test")
+			_, err := 		sm.CreateTab("concurrent", "test", "")
 			if err != nil {
 				t.Errorf("CreateTab: %v", err)
 			}
@@ -321,10 +321,10 @@ func TestConcurrentTabs(t *testing.T) {
 
 func TestCreateComboTab(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
-	tabID, err := sm.CreateComboTab("combo_session", []string{"test", "test2"})
+	tabID, err := sm.CreateComboTab("combo_session", []string{"test", "test2"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,10 +354,10 @@ func TestCreateComboTab(t *testing.T) {
 
 func TestCreateComboTab_SingleMode(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
-	tabID, err := sm.CreateComboTab("single_combo", []string{"test"})
+	tabID, err := sm.CreateComboTab("single_combo", []string{"test"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,10 +383,10 @@ func TestCreateComboTab_SingleMode(t *testing.T) {
 
 func TestCreateComboTab_UnknownMode(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
-	_, err := sm.CreateComboTab("combo_bad", []string{"test", "nonexistent"})
+	_, err := sm.CreateComboTab("combo_bad", []string{"test", "nonexistent"}, "")
 	if err == nil {
 		t.Fatal("expected error for unknown mode")
 	}
@@ -394,10 +394,10 @@ func TestCreateComboTab_UnknownMode(t *testing.T) {
 
 func TestCreateComboTab_EmptyModes(t *testing.T) {
 	cfg := newTestConfig(t)
-	sm := NewSessionManager(cfg, 1*time.Hour)
+	sm := NewSessionManager(cfg, 1*time.Hour, true)
 	defer sm.Stop()
 
-	_, err := sm.CreateComboTab("combo_empty", []string{})
+	_, err := sm.CreateComboTab("combo_empty", []string{}, "")
 	if err == nil {
 		t.Fatal("expected error for empty modes")
 	}
