@@ -24,14 +24,14 @@ var writerPromptTemplate string
 var maxContinueMessages = 20
 
 type WriterConfig struct {
-	Query  string `json:"query"`
-	Filename string `json:"output"`
+	Query    string `json:"query"`
+	Filename string `json:"filename"`
 }
 
 type Config struct {
-	Provider creative.ProviderConfig `json:"provider"`
-	Modes    []creative.ModeConfig   `json:"modes"`
-	Writer   WriterConfig            `json:"writer"`
+	Provider    creative.ProviderConfig `json:"provider"`
+	BookFolders []string                `json:"book_folders"`
+	Writer      WriterConfig            `json:"writer"`
 }
 
 func main() {
@@ -60,16 +60,11 @@ func main() {
 		log.Fatalf("writer.query is required")
 	}
 	if cfg.Writer.Filename == "" {
-		log.Fatalf("writer.output is required")
+		log.Fatalf("writer.filename is required")
 	}
 
 	if err := os.MkdirAll(filepath.Dir(cfg.Writer.Filename), 0755); err != nil {
 		log.Fatalf("Cannot create output directory: %v", err)
-	}
-
-	var mergedFolders []string
-	for _, m := range cfg.Modes {
-		mergedFolders = append(mergedFolders, m.Folders...)
 	}
 
 	prvAI := creative.NewRouterAI(cfg.Provider)
@@ -77,7 +72,7 @@ func main() {
 	log.Printf("[writer] декомпозиция темы...")
 	decomposeChat := creative.NewChat(prvAI)
 	decomposeChat.AddSystem(decomposePrompt)
-	decomposeChat.SetTools(creative.BookTools(mergedFolders...))
+	decomposeChat.SetTools(creative.BookTools(cfg.BookFolders...))
 
 	rawChapters, err := runUntilDone(decomposeChat, cfg.Writer.Query)
 	if err != nil {
@@ -88,7 +83,7 @@ func main() {
 	}
 
 	chapters := func() []string {
-		marker := "=== Глава"
+		marker := "==="
 		lines := strings.Split(rawChapters, "\n")
 		var chs []string
 		var cur strings.Builder
@@ -136,7 +131,7 @@ func main() {
 
 		chat := creative.NewChat(prvAI)
 		chat.AddSystem(fmt.Sprintf(writerPromptTemplate, rawBlock))
-		chat.SetTools(creative.BookTools(mergedFolders...))
+		chat.SetTools(creative.BookTools(cfg.BookFolders...))
 
 		content, err := runUntilDone(chat, "Напиши главу.")
 		if err != nil {
