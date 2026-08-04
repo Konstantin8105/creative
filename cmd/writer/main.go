@@ -38,16 +38,27 @@ func main() {
 	log.SetFlags(log.Ltime | log.Lshortfile)
 	log.SetOutput(os.Stdout)
 
-	configPath := flag.String("config", "", "Path to book config JSON (required)")
+	configs := flag.String("configs", "", "Comma-separated list of book config JSONs")
 	flag.Parse()
 
-	if *configPath == "" {
-		fmt.Println("Usage: writer -config <book.json>")
+	if *configs == "" {
+		fmt.Println("Usage: writer -configs book1.json,book2.json,...")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	raw, err := os.ReadFile(*configPath)
+	for _, path := range strings.Split(*configs, ",") {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		log.Printf("[writer] конфиг: %s", path)
+		processBook(path)
+	}
+}
+
+func processBook(configPath string) {
+	raw, err := os.ReadFile(configPath)
 	if err != nil {
 		log.Fatalf("Cannot read config: %v", err)
 	}
@@ -61,6 +72,11 @@ func main() {
 	}
 	if cfg.Writer.Filename == "" {
 		log.Fatalf("writer.filename is required")
+	}
+
+	if _, err := os.Stat(cfg.Writer.Filename); !os.IsNotExist(err) {
+		log.Printf("[writer] файл уже существует: %s — пропускаем", cfg.Writer.Filename)
+		return
 	}
 
 	if err := os.MkdirAll(filepath.Dir(cfg.Writer.Filename), 0755); err != nil {
