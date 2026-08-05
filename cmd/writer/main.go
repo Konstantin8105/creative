@@ -19,17 +19,22 @@ import (
 var writerPrompt string
 
 // maxContinueMessages prevents infinite loop in runUntilDone.
-var maxContinueMessages = 3
+var maxContinueMessages = 20
 
 // maxBranchDepth limits subtask branching: at depth >= maxBranchDepth
 // the "subtask" tool is not provided, so the AI does the work itself.
 const maxBranchDepth = 2
 
 type WriterConfig struct {
-	Query       string   `json:"query"`
-	Filename    string   `json:"filename"`
-	BookFolders []string `json:"book_folders,omitempty"`
+	Query       QueryData `json:"query"`
+	Filename    string    `json:"filename"`
+	BookFolders []string  `json:"book_folders,omitempty"`
 	depth       int
+}
+
+type QueryData struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 type Config struct {
@@ -57,12 +62,17 @@ func main() {
 			}
 			example.Queries = append(example.Queries,
 				WriterConfig{
-					Query:       "example of query",
+					Query: QueryData{
+						Name: "example of query",
+					},
 					Filename:    "filename of result",
 					BookFolders: []string{"c:\folder", "."},
 				},
 				WriterConfig{
-					Query:    "second example",
+					Query: QueryData{
+						Name:        "second example",
+						Description: "write shortly",
+					},
 					Filename: "second filename",
 				},
 			)
@@ -99,7 +109,7 @@ func main() {
 		}
 		prvAI := creative.NewRouterAI(cfg.Provider)
 		for _, q := range cfg.Queries {
-			if err := runQuery(prvAI, q); err != nil {
+			if err := runQuery(prvAI, q, ""); err != nil {
 				fmt.Fprintf(os.Stdout, "[writer] ошибка: %v", err)
 				continue
 			}
@@ -107,8 +117,8 @@ func main() {
 	}
 }
 
-func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
-	if q.Query == "" {
+func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
+	if q.Query.Name == "" {
 		return fmt.Errorf("writer.query is required")
 	}
 	if q.Filename == "" {
@@ -122,14 +132,14 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 	}
 
 	log.Printf("[writer] задача: %s", q.Query)
-	write(q.Filename, "%s %s\n", strings.Repeat("#", q.depth+1), q.Query)
+	write(q.Filename, "%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query)
 
 	tmpl := struct {
 		Query       string
 		AddBookTool bool
 		AddSubTask  bool
 	}{
-		Query: q.Query,
+		Query: fmt.Sprintf("Имя задачи: %s\nОписание для задачи: %s\n", q.Query, q.Query.Description),
 	}
 
 	var tools []creative.Tool
@@ -169,14 +179,17 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 
 	write(q.Filename, "\n%s\n", content)
 	for is, subtask := range subtasks {
-		log.Printf("Depth%d.%d %s\n", q.depth, is, subtask)
+		log.Printf("Depth %s.%d.%d %s\n", prefix, q.depth, is, subtask)
 	}
 
-	for _, subtask := range subtasks {
-		sub := q
-		sub.Query += "\n" + subtask
-		sub.depth += 1
-		if err := runQuery(prvAI, sub); err != nil {
+	for is, subtask := range subtasks {
+		// TODO надо сделать так чтобы следующая задача решалась какие другие задачи решать не надо и будут решаться другими запросами
+		if err := runQuery(prvAI, WriterConfig{
+			Query:       q.Query + "\n" + subtask,
+			Filename:    q.Filename,
+			BookFolders: q.BookFolders,
+			depth:       q.depth + 1,
+		}, fmt.Sprintf("%s.%d", prefix, is)); err != nil {
 			fmt.Fprintf(os.Stdout, "runQuery error: %v", err)
 			continue
 		}
@@ -224,7 +237,7 @@ func subtaskTool(subtasks *[]string) creative.Tool {
 				return "Ошибка: поле description не должно быть пустым"
 			}
 
-			// log.Printf("add subtask: %s", desc)
+			log.Printf("add subtask: %s", desc)
 			*subtasks = append(*subtasks, desc)
 			return "Подзадачи поставлены в очередь, не дожидайся их окончания."
 		},
