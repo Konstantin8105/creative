@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Konstantin8105/creative"
 )
@@ -114,7 +113,8 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 		return fmt.Errorf("Cannot create output directory: %v", err)
 	}
 
-	log.Printf("[writer] задача: %s", preview(q.Query))
+	log.Printf("[writer] задача: %s", q.Query)
+	write(q.Filename, "%s %s\n", strings.Repeat("#", q.depth+1), q.Query)
 
 	prompt := strings.Replace(writerPrompt, "__TASK__", q.Query, 1)
 
@@ -122,7 +122,7 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 	chat.AddSystem(prompt)
 
 	var tools []creative.Tool
-	if len(q.BookFolders) > 0 { // BookTools panics on an empty list
+	if 0 < len(q.BookFolders) { // BookTools panics on an empty list
 		tools = append(tools, creative.BookTools(q.BookFolders...)...)
 	}
 	var subtasks []string
@@ -136,8 +136,10 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 		return fmt.Errorf("run: %v", err)
 	}
 
-	// write result
-	write(q.Filename, "%s %s\n\n%s\n", strings.Repeat("#", q.depth+1), q.Query, content)
+	write(q.Filename, "\n%s\n", content)
+	for is, subtask := range subtasks {
+		log.Printf("Depth%d.%d %s\n", q.depth, is, subtask)
+	}
 
 	for _, subtask := range subtasks {
 		sub := q
@@ -152,14 +154,15 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 }
 
 func write(filename string, format string, a ...any) {
-	dat, err := os.ReadFile(filename)
-	if err != nil {
-		return
-	}
+	dat, _ := os.ReadFile(filename)
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, format, a...)
 	dat = append(dat, buf.Bytes()...)
-	_ = os.WriteFile(filename, dat, 0644)
+	err := os.WriteFile(filename, dat, 0644)
+	if err != nil {
+		log.Printf("Error: %v", err)
+		return
+	}
 }
 
 // subtaskTool is a single uniform tool: it behaves identically at every level
@@ -196,52 +199,33 @@ func subtaskTool(subtasks *[]string) creative.Tool {
 	}
 }
 
-func preview(s string) string {
-	const max = 60
-	r := []rune(strings.TrimSpace(s))
-	if len(r) <= max {
-		return string(r)
-	}
-	return string(r[:max]) + "..."
-}
-
 func runUntilDone(chat *creative.Chat, firstMsg string) (string, error) {
 	var acc strings.Builder
 	msg := firstMsg
-	done := false
 
 	chat.SetCallback(&creative.ChatEventCallback{
 		OnStreamChunk: func(chunk string) {
-			if done {
-				return
-			}
-			idx := strings.Index(chunk, "Я закончил")
-			if idx < 0 {
-				fmt.Print(chunk)
-			} else {
-				fmt.Print(chunk[:idx])
-				done = true
-			}
+			fmt.Print(chunk)
 		},
 	})
 
 	for i := 0; i <= maxContinueMessages; i++ {
+		log.Printf("iter:%d", i)
 		resp, err := chat.SendStream(msg, true)
 		if err != nil {
 			return "", err
 		}
-		idx := strings.Index(resp, "Я закончил")
-		if idx < 0 {
-			acc.WriteString(resp)
-			if i == maxContinueMessages {
-				log.Printf("[writer] достигнут лимит продолжений (%d)", maxContinueMessages)
-				break
-			}
-			log.Printf("[writer] продолжаю...")
-			msg = "Продолжи"
-			time.Sleep(time.Second)
-		} else {
-			acc.WriteString(resp[:idx])
+		log.Printf("iter:%d %s", i, resp)
+
+		acc.WriteString(resp)
+		if i == maxContinueMessages {
+			log.Printf("[writer] достигнут лимит продолжений (%d)", maxContinueMessages)
+			break
+		}
+		log.Printf("[writer] продолжаю...")
+		msg = "Продолжи"
+
+		if strings.Contains(resp, "Я закончил") {
 			break
 		}
 	}
