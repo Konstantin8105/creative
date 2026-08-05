@@ -47,7 +47,14 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stdout, "Usage: writer -configs book1.json,book2.json,...\n")
 		fmt.Fprintf(os.Stdout, "Example of config:\n%s\n", func() string {
-			var example Config
+			example := Config{
+				Provider: creative.ProviderConfig{
+					Endpoint:    "http://192.168.56.1:1234/v1",
+					Model:       "openai/gpt-oss-20b",
+					Key:         "lmstudio",
+					ContextSize: 24000,
+				},
+			}
 			example.Queries = append(example.Queries,
 				WriterConfig{
 					Query:       "example of query",
@@ -149,6 +156,7 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 		}
 		prompt = buf.String()
 	}
+	// log.Printf("prompt: %s", prompt)
 
 	chat := creative.NewChat(prvAI)
 	chat.AddSystem(prompt)
@@ -216,7 +224,7 @@ func subtaskTool(subtasks *[]string) creative.Tool {
 				return "Ошибка: поле description не должно быть пустым"
 			}
 
-			log.Printf("add subtask: %s", desc)
+			// log.Printf("add subtask: %s", desc)
 			*subtasks = append(*subtasks, desc)
 			return "Подзадачи поставлены в очередь, не дожидайся их окончания."
 		},
@@ -234,12 +242,12 @@ func runUntilDone(chat *creative.Chat, firstMsg string) (string, error) {
 	})
 
 	for i := 0; i <= maxContinueMessages; i++ {
-		log.Printf("iter:%d", i)
+		// log.Printf("iter:%d", i)
 		resp, err := chat.SendStream(msg, true)
 		if err != nil {
 			return "", err
 		}
-		log.Printf("iter:%d %s", i, resp)
+		// log.Printf("iter:%d %s", i, resp)
 
 		acc.WriteString(resp)
 		if i == maxContinueMessages {
