@@ -131,15 +131,18 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
 		return fmt.Errorf("Cannot create output directory: %v", err)
 	}
 
-	log.Printf("[writer] задача: %s", q.Query)
-	write(q.Filename, "%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query)
+	log.Printf("[writer] задача: %s", q.Query.Name)
+	write(q.Filename, "%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query.Name)
+	if q.Query.Description != "" {
+		write(q.Filename, "%s\n", q.Query.Description)
+	}
 
 	tmpl := struct {
 		Query       string
 		AddBookTool bool
 		AddSubTask  bool
 	}{
-		Query: fmt.Sprintf("Имя задачи: %s\nОписание для задачи: %s\n", q.Query, q.Query.Description),
+		Query: fmt.Sprintf("Имя задачи: %s\nОписание для задачи: %s\n", q.Query.Name, q.Query.Description),
 	}
 
 	var tools []creative.Tool
@@ -147,7 +150,7 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
 		tools = append(tools, creative.BookTools(q.BookFolders...)...)
 		tmpl.AddBookTool = true
 	}
-	var subtasks []string
+	var subtasks []QueryData
 	if q.depth < maxBranchDepth {
 		tools = append(tools, subtaskTool(&subtasks))
 		tmpl.AddSubTask = true
@@ -179,13 +182,12 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
 
 	write(q.Filename, "\n%s\n", content)
 	for is, subtask := range subtasks {
-		log.Printf("Depth %s.%d.%d %s\n", prefix, q.depth, is, subtask)
+		log.Printf("Depth %s.%d.%d %s\n", prefix, q.depth, is, subtask.Name)
 	}
 
-	for is, subtask := range subtasks {
-		// TODO надо сделать так чтобы следующая задача решалась какие другие задачи решать не надо и будут решаться другими запросами
+	for is := range subtasks {
 		if err := runQuery(prvAI, WriterConfig{
-			Query:       q.Query + "\n" + subtask,
+			Query:       subtaskQuery(q.Query, subtasks, is),
 			Filename:    q.Filename,
 			BookFolders: q.BookFolders,
 			depth:       q.depth + 1,
@@ -195,6 +197,35 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
 		}
 	}
 	return nil
+}
+
+// subtaskQuery строит QueryData для is-й подзадачи: общая задача, список всех
+// подзадач и только одна помеченная «реши её», чтобы каждый рекурсивный
+// запрос решал ровно одну конкретную задачу.
+func subtaskQuery(parent QueryData, subtasks []QueryData, is int) QueryData {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Общая задача: %s\n", parent.Name)
+	if parent.Description != "" {
+		fmt.Fprintf(&b, "%s\n", parent.Description)
+	}
+	b.WriteString("Список всех подзадач:\n")
+	for i, s := range subtasks {
+		if i == is {
+			b.WriteString("=> ")
+		} else {
+			b.WriteString("   ")
+		}
+		b.WriteString(s.Name)
+		if s.Description != "" {
+			fmt.Fprintf(&b, ": %s", s.Description)
+		}
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "Реши только эту подзадачу: %s\n", subtasks[is].Name)
+	if subtasks[is].Description != "" {
+		fmt.Fprintf(&b, "%s\n", subtasks[is].Description)
+	}
+	return QueryData{Name: subtasks[is].Name, Description: strings.TrimSpace(b.String())}
 }
 
 func write(filename string, format string, a ...any) {
@@ -211,35 +242,39 @@ func write(filename string, format string, a ...any) {
 
 // subtaskTool is a single uniform tool: it behaves identically at every level
 // and does not know whether it is used for the main task or a subtask.
-func subtaskTool(subtasks *[]string) creative.Tool {
+func subtaskTool(subtasks *[]QueryData) creative.Tool {
 	return creative.Tool{
 		Name:        "subtask",
-		Description: "Запустить подзадачу. В параметре description передай ПОЛНОЕ самодостаточное описание подзадачи со всем необходимым контекстом.",
+		Description: "Поставить подзадачу в очередь. Она будет выполнена отдельным запросом.",
 		Parameters: &creative.ToolParameters{
 			Type: "object",
 			Properties: map[string]creative.ToolProperty{
+				"name": {
+					Type:        "string",
+					Description: "Краткое название подзадачи, например «Разработка ...»",
+				},
 				"description": {
 					Type:        "string",
 					Description: "Полное самодостаточное описание подзадачи со всем необходимым контекстом",
 				},
 			},
-			Required: []string{"description"},
+			Required: []string{"name"},
 		},
 		Execute: func(params string) string {
 			var p struct {
+				Name        string `json:"name"`
 				Description string `json:"description"`
 			}
 			if err := json.Unmarshal([]byte(params), &p); err != nil {
 				return fmt.Sprintf("Ошибка: неверный JSON параметров: %v", err)
 			}
-			desc := strings.TrimSpace(p.Description)
-			if desc == "" {
-				return "Ошибка: поле description не должно быть пустым"
+			name := strings.TrimSpace(p.Name)
+			if name == "" {
+				return "Ошибка: поле name не должно быть пустым"
 			}
-
-			log.Printf("add subtask: %s", desc)
-			*subtasks = append(*subtasks, desc)
-			return "Подзадачи поставлены в очередь, не дожидайся их окончания."
+			log.Printf("add subtask: %s", name)
+			*subtasks = append(*subtasks, QueryData{Name: name, Description: strings.TrimSpace(p.Description)})
+			return "Подзадача поставлена в очередь. Не пиши её текст сам — она будет выполнена отдельным запросом."
 		},
 	}
 }

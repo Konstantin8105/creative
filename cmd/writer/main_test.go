@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 func newTestQuery(t *testing.T) WriterConfig {
 	t.Helper()
 	return WriterConfig{
-		Query:    "Тема книги",
+		Query:    QueryData{Name: "Тема книги"},
 		Filename: filepath.Join(t.TempDir(), "book.md"),
 	}
 }
@@ -31,7 +32,7 @@ func TestRunQueryWritesFile(t *testing.T) {
 		t.Fatalf("read file: %v", err)
 	}
 	out := string(dat)
-	if !strings.Contains(out, "# Тема книги") {
+	if !strings.Contains(out, "# .0 Тема книги") {
 		t.Errorf("file missing title header: %q", out)
 	}
 	if !strings.Contains(out, "Содержание.") {
@@ -48,7 +49,7 @@ func TestRunQuerySubtask(t *testing.T) {
 				Type: "function",
 				Function: creative.ToolCallFunction{
 					Name:      "subtask",
-					Arguments: `{"description": "Опиши главу 1"}`,
+					Arguments: `{"name": "Глава 1", "description": "Опиши главу 1"}`,
 				},
 			}},
 		},
@@ -59,7 +60,7 @@ func TestRunQuerySubtask(t *testing.T) {
 				Type: "function",
 				Function: creative.ToolCallFunction{
 					Name:      "subtask",
-					Arguments: `{"description": "Опиши главу 2"}`,
+					Arguments: `{"name": "Глава 2", "description": "Опиши главу 2"}`,
 				},
 			}},
 		},
@@ -76,15 +77,30 @@ func TestRunQuerySubtask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read file: %v", err)
 	}
-	want := "# Тема книги\n" +
-		"\nОсновная часть.\nЯ закончил\n" +
-		"## Тема книги\nОпиши главу 1\n" +
-		"\nГлава 1.\nЯ закончил\n" +
-		"## Тема книги\nОпиши главу 2\n" +
-		"\nГлава 2.\nЯ закончил\n"
-	if got := string(dat); got != want {
-		t.Errorf("file content mismatch:\ngot:\n%q\nwant:\n%q", got, want)
+	if got := string(dat); got != wantBookContent() {
+		t.Errorf("file content mismatch:\ngot:\n%q\nwant:\n%q", got, wantBookContent())
 	}
+}
+
+func wantBookContent() string {
+	return "# .0 Тема книги\n" +
+		"\nОсновная часть.\nЯ закончил\n" +
+		"## .0.1 Глава 1\n" +
+		"Общая задача: Тема книги\n" +
+		"Список всех подзадач:\n" +
+		"=> Глава 1: Опиши главу 1\n" +
+		"   Глава 2: Опиши главу 2\n" +
+		"Реши только эту подзадачу: Глава 1\n" +
+		"Опиши главу 1\n" +
+		"\nГлава 1.\nЯ закончил\n" +
+		"## .1.1 Глава 2\n" +
+		"Общая задача: Тема книги\n" +
+		"Список всех подзадач:\n" +
+		"   Глава 1: Опиши главу 1\n" +
+		"=> Глава 2: Опиши главу 2\n" +
+		"Реши только эту подзадачу: Глава 2\n" +
+		"Опиши главу 2\n" +
+		"\nГлава 2.\nЯ закончил\n"
 }
 
 func TestRunQueryMultipleSubtasks(t *testing.T) {
@@ -97,7 +113,7 @@ func TestRunQueryMultipleSubtasks(t *testing.T) {
 					Type: "function",
 					Function: creative.ToolCallFunction{
 						Name:      "subtask",
-						Arguments: `{"description": "Опиши главу 1"}`,
+						Arguments: `{"name": "Глава 1", "description": "Опиши главу 1"}`,
 					},
 				},
 				{
@@ -105,7 +121,7 @@ func TestRunQueryMultipleSubtasks(t *testing.T) {
 					Type: "function",
 					Function: creative.ToolCallFunction{
 						Name:      "subtask",
-						Arguments: `{"description": "Опиши главу 2"}`,
+						Arguments: `{"name": "Глава 2", "description": "Опиши главу 2"}`,
 					},
 				},
 			},
@@ -123,14 +139,8 @@ func TestRunQueryMultipleSubtasks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read file: %v", err)
 	}
-	want := "# Тема книги\n" +
-		"\nОсновная часть.\nЯ закончил\n" +
-		"## Тема книги\nОпиши главу 1\n" +
-		"\nГлава 1.\nЯ закончил\n" +
-		"## Тема книги\nОпиши главу 2\n" +
-		"\nГлава 2.\nЯ закончил\n"
-	if got := string(dat); got != want {
-		t.Errorf("file content mismatch:\ngot:\n%q\nwant:\n%q", got, want)
+	if got := string(dat); got != wantBookContent() {
+		t.Errorf("file content mismatch:\ngot:\n%q\nwant:\n%q", got, wantBookContent())
 	}
 }
 
@@ -173,7 +183,7 @@ func TestRunQueryValidation(t *testing.T) {
 	if err := runQuery(mock, WriterConfig{Filename: "x.md"}, ""); err == nil || !strings.Contains(err.Error(), "query is required") {
 		t.Errorf("empty query error = %v", err)
 	}
-	if err := runQuery(mock, WriterConfig{Query: "q"}, ""); err == nil || !strings.Contains(err.Error(), "filename is required") {
+	if err := runQuery(mock, WriterConfig{Query: QueryData{Name: "q"}}, ""); err == nil || !strings.Contains(err.Error(), "filename is required") {
 		t.Errorf("empty filename error = %v", err)
 	}
 
@@ -203,7 +213,7 @@ func TestSystemPromptRendering(t *testing.T) {
 	if err := runQuery(mock, q, ""); err != nil {
 		t.Fatalf("runQuery: %v", err)
 	}
-	if p := mock.SystemPrompt(); !strings.Contains(p, q.Query) {
+	if p := mock.SystemPrompt(); !strings.Contains(p, q.Query.Name) {
 		t.Errorf("system prompt missing query: %q", p)
 	} else if !strings.Contains(p, "subtask") {
 		t.Errorf("system prompt missing subtask section: %q", p)
@@ -223,20 +233,27 @@ func TestSystemPromptRendering(t *testing.T) {
 }
 
 func TestSubtaskTool(t *testing.T) {
-	var subtasks []string
+	var subtasks []QueryData
 	tool := subtaskTool(&subtasks)
 
 	if res := tool.Execute("not json"); !strings.HasPrefix(res, "Ошибка: неверный JSON") {
 		t.Errorf("invalid JSON result = %q", res)
 	}
-	if res := tool.Execute(`{"description": "   "}`); res != "Ошибка: поле description не должно быть пустым" {
-		t.Errorf("empty description result = %q", res)
+	if res := tool.Execute(`{"name": "   "}`); res != "Ошибка: поле name не должно быть пустым" {
+		t.Errorf("empty name result = %q", res)
 	}
-	if res := tool.Execute(`{"description": "Опиши главу"}`); !strings.Contains(res, "очередь") {
+	if res := tool.Execute(`{"name": "Глава 1"}`); !strings.Contains(res, "очередь") {
 		t.Errorf("queued result = %q", res)
 	}
-	if len(subtasks) != 1 || subtasks[0] != "Опиши главу" {
-		t.Errorf("subtasks = %v, want [Опиши главу]", subtasks)
+	if res := tool.Execute(`{"name": "Глава 2", "description": "Опиши главу 2"}`); !strings.Contains(res, "очередь") {
+		t.Errorf("queued result = %q", res)
+	}
+	want := []QueryData{
+		{Name: "Глава 1"},
+		{Name: "Глава 2", Description: "Опиши главу 2"},
+	}
+	if !reflect.DeepEqual(subtasks, want) {
+		t.Errorf("subtasks = %v, want %v", subtasks, want)
 	}
 }
 
