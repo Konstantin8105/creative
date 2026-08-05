@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/Konstantin8105/creative"
 )
@@ -18,11 +19,11 @@ import (
 var writerPrompt string
 
 // maxContinueMessages prevents infinite loop in runUntilDone.
-var maxContinueMessages = 20
+var maxContinueMessages = 3
 
 // maxBranchDepth limits subtask branching: at depth >= maxBranchDepth
 // the "subtask" tool is not provided, so the AI does the work itself.
-const maxBranchDepth = 5
+const maxBranchDepth = 2
 
 type WriterConfig struct {
 	Query       string   `json:"query"`
@@ -116,19 +117,41 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 	log.Printf("[writer] задача: %s", q.Query)
 	write(q.Filename, "%s %s\n", strings.Repeat("#", q.depth+1), q.Query)
 
-	prompt := strings.Replace(writerPrompt, "__TASK__", q.Query, 1)
-
-	chat := creative.NewChat(prvAI)
-	chat.AddSystem(prompt)
+	tmpl := struct {
+		Query       string
+		AddBookTool bool
+		AddSubTask  bool
+	}{
+		Query: q.Query,
+	}
 
 	var tools []creative.Tool
 	if 0 < len(q.BookFolders) { // BookTools panics on an empty list
 		tools = append(tools, creative.BookTools(q.BookFolders...)...)
+		tmpl.AddBookTool = true
 	}
 	var subtasks []string
 	if q.depth < maxBranchDepth {
 		tools = append(tools, subtaskTool(&subtasks))
+		tmpl.AddSubTask = true
 	}
+
+	var prompt string
+	{
+		t, err := template.New("todos").Parse(writerPrompt)
+		if err != nil {
+			panic(err)
+		}
+		var buf bytes.Buffer
+		err = t.Execute(&buf, tmpl)
+		if err != nil {
+			panic(err)
+		}
+		prompt = buf.String()
+	}
+
+	chat := creative.NewChat(prvAI)
+	chat.AddSystem(prompt)
 	chat.SetTools(tools)
 
 	content, err := runUntilDone(chat, "Выполни задачу.")
@@ -193,6 +216,7 @@ func subtaskTool(subtasks *[]string) creative.Tool {
 				return "Ошибка: поле description не должно быть пустым"
 			}
 
+			log.Printf("add subtask: %s", desc)
 			*subtasks = append(*subtasks, desc)
 			return "Подзадачи поставлены в очередь, не дожидайся их окончания."
 		},
