@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"flag"
@@ -27,7 +28,7 @@ const maxBranchDepth = 5
 type WriterConfig struct {
 	Query       string   `json:"query"`
 	Filename    string   `json:"filename"`
-	BookFolders []string `json:"book_folders"`
+	BookFolders []string `json:"book_folders,omitempty"`
 	depth       int
 }
 
@@ -43,9 +44,28 @@ func main() {
 	configs := flag.String("configs", "", "Comma-separated list of book config JSONs")
 	flag.Parse()
 
-	if *configs == "" {
-		fmt.Println("Usage: writer -configs book1.json,book2.json,...")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stdout, "Usage: writer -configs book1.json,book2.json,...\n")
+		fmt.Fprintf(os.Stdout, "Example of config:\n%s\n", func() string {
+			var example Config
+			example.Queries = append(example.Queries,
+				WriterConfig{
+					Query:       "example of query",
+					Filename:    "filename of result",
+					BookFolders: []string{"c:\folder", "."},
+				},
+				WriterConfig{
+					Query:    "second example",
+					Filename: "second filename",
+				},
+			)
+			dat, _ := json.MarshalIndent(example, " ", "   ")
+			return string(dat)
+		}())
 		flag.PrintDefaults()
+	}
+	if *configs == "" {
+		flag.Usage()
 		os.Exit(1)
 	}
 
@@ -116,14 +136,8 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 		return fmt.Errorf("run: %v", err)
 	}
 
-	outFile, err := os.OpenFile(q.Filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("Cannot create output file: %v", err)
-	}
-	defer outFile.Close()
-
-	fmt.Fprintf(outFile, "# %s\n\n%s\n", preview(q.Query), content)
-	log.Printf("[writer] готово: %s", q.Filename)
+	// write result
+	write(q.Filename, "%s %s\n\n%s\n", strings.Repeat("#", q.depth+1), q.Query, content)
 
 	for _, subtask := range subtasks {
 		sub := q
@@ -137,12 +151,23 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
 	return nil
 }
 
+func write(filename string, format string, a ...any) {
+	dat, err := os.ReadFile(filename)
+	if err != nil {
+		return
+	}
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, format, a...)
+	dat = append(dat, buf.Bytes()...)
+	_ = os.WriteFile(filename, dat, 0644)
+}
+
 // subtaskTool is a single uniform tool: it behaves identically at every level
 // and does not know whether it is used for the main task or a subtask.
 func subtaskTool(subtasks *[]string) creative.Tool {
 	return creative.Tool{
 		Name:        "subtask",
-		Description: "Запустить подзадачу. В параметре description передай ПОЛНОЕ самодостаточное описание подзадачи со всем необходимым контекстом. Результат вернётся текстом.",
+		Description: "Запустить подзадачу. В параметре description передай ПОЛНОЕ самодостаточное описание подзадачи со всем необходимым контекстом.",
 		Parameters: &creative.ToolParameters{
 			Type: "object",
 			Properties: map[string]creative.ToolProperty{
@@ -166,7 +191,7 @@ func subtaskTool(subtasks *[]string) creative.Tool {
 			}
 
 			*subtasks = append(*subtasks, desc)
-			return "Будет выполнено позже."
+			return "Подзадачи поставлены в очередь, не дожидайся их окончания."
 		},
 	}
 }
