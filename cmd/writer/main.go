@@ -14,24 +14,26 @@ import (
 	"github.com/Konstantin8105/creative"
 )
 
-//go:embed prompts/decompose.promt
-var decomposePrompt string
-
 //go:embed prompts/writer.promt
-var writerPromptTemplate string
+var writerPrompt string
 
 // maxContinueMessages prevents infinite loop in runUntilDone.
 var maxContinueMessages = 20
 
+// maxBranchDepth limits subtask branching: at depth >= maxBranchDepth
+// the "subtask" tool is not provided, so the AI does the work itself.
+const maxBranchDepth = 5
+
 type WriterConfig struct {
-	Query    string `json:"query"`
-	Filename string `json:"filename"`
+	Query       string   `json:"query"`
+	Filename    string   `json:"filename"`
+	BookFolders []string `json:"book_folders"`
+	depth       int
 }
 
 type Config struct {
-	Provider    creative.ProviderConfig `json:"provider"`
-	BookFolders []string                `json:"book_folders"`
-	Writer      WriterConfig            `json:"writer"`
+	Provider creative.ProviderConfig `json:"provider"`
+	Queries  []WriterConfig          `json:"queries"`
 }
 
 func main() {
@@ -53,116 +55,124 @@ func main() {
 			continue
 		}
 		log.Printf("[writer] конфиг: %s", path)
-		processBook(path)
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(os.Stdout, "Cannot read config: %v", err)
+			continue
+		}
+
+		var cfg Config
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			fmt.Fprintf(os.Stdout, "Cannot parse config: %v", err)
+			continue
+		}
+		if len(cfg.Queries) == 0 {
+			fmt.Fprintf(os.Stdout, "queries is required")
+			continue
+		}
+		prvAI := creative.NewRouterAI(cfg.Provider)
+		for _, q := range cfg.Queries {
+			if err := runQuery(prvAI, q); err != nil {
+				fmt.Fprintf(os.Stdout, "[writer] ошибка: %v", err)
+				continue
+			}
+		}
 	}
 }
 
-func processBook(configPath string) {
-	raw, err := os.ReadFile(configPath)
+func runQuery(prvAI creative.AIrunner, q WriterConfig) error {
+	if q.Query == "" {
+		return fmt.Errorf("writer.query is required")
+	}
+	if q.Filename == "" {
+		return fmt.Errorf("writer.filename is required")
+	}
+	if _, err := os.Stat(q.Filename); q.depth == 0 && !os.IsNotExist(err) {
+		return fmt.Errorf("[writer] файл уже существует: %s — пропускаем", q.Filename)
+	}
+	if err := os.MkdirAll(filepath.Dir(q.Filename), 0755); err != nil {
+		return fmt.Errorf("Cannot create output directory: %v", err)
+	}
+
+	log.Printf("[writer] задача: %s", preview(q.Query))
+
+	prompt := strings.Replace(writerPrompt, "__TASK__", q.Query, 1)
+
+	chat := creative.NewChat(prvAI)
+	chat.AddSystem(prompt)
+
+	var tools []creative.Tool
+	if len(q.BookFolders) > 0 { // BookTools panics on an empty list
+		tools = append(tools, creative.BookTools(q.BookFolders...)...)
+	}
+	var subtasks []string
+	if q.depth < maxBranchDepth {
+		tools = append(tools, subtaskTool(&subtasks))
+	}
+	chat.SetTools(tools)
+
+	content, err := runUntilDone(chat, "Выполни задачу.")
 	if err != nil {
-		log.Fatalf("Cannot read config: %v", err)
+		return fmt.Errorf("run: %v", err)
 	}
 
-	var cfg Config
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		log.Fatalf("Cannot parse config: %v", err)
-	}
-	if cfg.Writer.Query == "" {
-		log.Fatalf("writer.query is required")
-	}
-	if cfg.Writer.Filename == "" {
-		log.Fatalf("writer.filename is required")
-	}
-
-	if _, err := os.Stat(cfg.Writer.Filename); !os.IsNotExist(err) {
-		log.Printf("[writer] файл уже существует: %s — пропускаем", cfg.Writer.Filename)
-		return
-	}
-
-	if err := os.MkdirAll(filepath.Dir(cfg.Writer.Filename), 0755); err != nil {
-		log.Fatalf("Cannot create output directory: %v", err)
-	}
-
-	prvAI := creative.NewRouterAI(cfg.Provider)
-
-	log.Printf("[writer] декомпозиция темы...")
-	decomposeChat := creative.NewChat(prvAI)
-	decomposeChat.AddSystem(decomposePrompt)
-	decomposeChat.SetTools(creative.BookTools(cfg.BookFolders...))
-
-	rawChapters, err := runUntilDone(decomposeChat, cfg.Writer.Query)
+	outFile, err := os.OpenFile(q.Filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		log.Fatalf("Decompose failed: %v", err)
-	}
-	if rawChapters == "" {
-		log.Fatalf("Decompose returned empty response")
-	}
-
-	chapters := func() []string {
-		marker := "==="
-		lines := strings.Split(rawChapters, "\n")
-		var chs []string
-		var cur strings.Builder
-		for _, line := range lines {
-			if strings.Contains(line, marker) {
-				if 0 < cur.Len() {
-					chs = append(chs, cur.String())
-					cur.Reset()
-				}
-				continue
-			}
-			if cur.Len() <= 0 {
-				cur.WriteString(line)
-			} else {
-				cur.WriteString("\n")
-				cur.WriteString(line)
-			}
-		}
-		if 0 < cur.Len() {
-			chs = append(chs, cur.String())
-		}
-		return chs
-	}()
-	if len(chapters) == 0 {
-		log.Fatalf("Decompose did not produce any chapters. Raw response:\n%s", rawChapters)
-	}
-	log.Printf("[writer] найдено %d глав", len(chapters))
-
-	outFile, err := os.OpenFile(cfg.Writer.Filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatalf("Cannot create output file: %v", err)
+		return fmt.Errorf("Cannot create output file: %v", err)
 	}
 	defer outFile.Close()
 
-	r := []rune(strings.TrimSpace(cfg.Writer.Query))
-	if 60 < len(r) {
-		r = r[:60]
-	}
-	title := string(r)
-	fmt.Fprintf(outFile, "# %s\n\n", title)
+	fmt.Fprintf(outFile, "# %s\n\n%s\n", preview(q.Query), content)
+	log.Printf("[writer] готово: %s", q.Filename)
 
-	for i, rawBlock := range chapters {
-		log.Printf("[writer] глава %d/%d", i+1, len(chapters))
-		fmt.Printf("\n=== Глава %d ===\n%s\n\n", i+1, preview(rawBlock, 60))
-
-		chat := creative.NewChat(prvAI)
-		chat.AddSystem(fmt.Sprintf(writerPromptTemplate, rawBlock))
-		chat.SetTools(creative.BookTools(cfg.BookFolders...))
-
-		content, err := runUntilDone(chat, "Напиши главу.")
-		if err != nil {
-			log.Fatalf("Chapter %d failed: %v", i+1, err)
+	for _, subtask := range subtasks {
+		sub := q
+		sub.Query += "\n" + subtask
+		sub.depth += 1
+		if err := runQuery(prvAI, sub); err != nil {
+			fmt.Fprintf(os.Stdout, "runQuery error: %v", err)
+			continue
 		}
-
-		fmt.Fprintf(outFile, "## Глава %d\n\n%s\n\n---\n\n", i+1, content)
-		outFile.Sync()
-		log.Printf("[writer] глава %d завершена", i+1)
 	}
-
-	log.Printf("[writer] готово: %s", cfg.Writer.Filename)
+	return nil
 }
 
-func preview(s string, max int) string {
+// subtaskTool is a single uniform tool: it behaves identically at every level
+// and does not know whether it is used for the main task or a subtask.
+func subtaskTool(subtasks *[]string) creative.Tool {
+	return creative.Tool{
+		Name:        "subtask",
+		Description: "Запустить подзадачу. В параметре description передай ПОЛНОЕ самодостаточное описание подзадачи со всем необходимым контекстом. Результат вернётся текстом.",
+		Parameters: &creative.ToolParameters{
+			Type: "object",
+			Properties: map[string]creative.ToolProperty{
+				"description": {
+					Type:        "string",
+					Description: "Полное самодостаточное описание подзадачи со всем необходимым контекстом",
+				},
+			},
+			Required: []string{"description"},
+		},
+		Execute: func(params string) string {
+			var p struct {
+				Description string `json:"description"`
+			}
+			if err := json.Unmarshal([]byte(params), &p); err != nil {
+				return fmt.Sprintf("Ошибка: неверный JSON параметров: %v", err)
+			}
+			desc := strings.TrimSpace(p.Description)
+			if desc == "" {
+				return "Ошибка: поле description не должно быть пустым"
+			}
+
+			*subtasks = append(*subtasks, desc)
+			return "Будет выполнено позже."
+		},
+	}
+}
+
+func preview(s string) string {
+	const max = 60
 	r := []rune(strings.TrimSpace(s))
 	if len(r) <= max {
 		return string(r)
