@@ -18,7 +18,7 @@ import (
 
 func TestAiComp(t *testing.T) {
 	t.Run("models", func(t *testing.T) {
-		ai := TestAi{models: "gpt-4, gpt-3.5"}
+		ai := creative.MockAI{Models: "gpt-4, gpt-3.5"}
 		out, err := ai.GetModels()
 		if err != nil {
 			t.Error(err)
@@ -26,7 +26,7 @@ func TestAiComp(t *testing.T) {
 		t.Logf("%s", out)
 	})
 	t.Run("SendStream", func(t *testing.T) {
-		ai := TestAi{rs: []string{"Hello", " ", "World", "!"}}
+		ai := creative.MockAI{Rs: []string{"Hello", " ", "World", "!"}}
 		out, err := ai.SendStream(nil, true, func(chunkType, chunk string) {
 			t.Logf("chunk [%s]: %s", chunkType, chunk)
 		}, nil)
@@ -39,7 +39,7 @@ func TestAiComp(t *testing.T) {
 		}
 	})
 	t.Run("SendStream_empty", func(t *testing.T) {
-		ai := TestAi{resp: "single response"}
+		ai := creative.MockAI{Resp: "single response"}
 		var chunks []string
 		out, err := ai.SendStream(nil, true, func(chunkType, chunk string) {
 			chunks = append(chunks, chunk)

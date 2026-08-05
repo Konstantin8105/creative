@@ -8,7 +8,7 @@ import (
 
 func TestChat(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
-		prv := TestAi{}
+		prv := creative.MockAI{}
 		ch := creative.NewChat(&prv)
 		_, err := ch.SendStream("Hello", false)
 		if err != nil {
@@ -16,7 +16,7 @@ func TestChat(t *testing.T) {
 		}
 	})
 	t.Run("response", func(t *testing.T) {
-		prv := TestAi{resp: "My name"}
+		prv := creative.MockAI{Resp: "My name"}
 		ch := creative.NewChat(&prv)
 		_, err := ch.SendStream("Hello", false)
 		if err != nil {
@@ -24,7 +24,7 @@ func TestChat(t *testing.T) {
 		}
 	})
 	t.Run("system", func(t *testing.T) {
-		prv := TestAi{resp: "My name"}
+		prv := creative.MockAI{Resp: "My name"}
 		ch := creative.NewChat(&prv)
 		ch.AddSystem("info of agent system")
 		_, err := ch.SendStream("Hello", false)
@@ -33,11 +33,11 @@ func TestChat(t *testing.T) {
 		}
 	})
 	t.Run("dialog", func(t *testing.T) {
-		prv := TestAi{resp: "My name"}
+		prv := creative.MockAI{Resp: "My name"}
 		ch := creative.NewChat(&prv)
 		ch.AddSystem("info of agent system")
 		for _, s := range []string{"QWE", "WER", "ERT"} {
-			prv.resp = "OUT:" + s
+			prv.Resp = "OUT:" + s
 			_, err := ch.SendStream("IN:"+s, false)
 			if err != nil {
 				t.Fatal(err)
@@ -53,8 +53,8 @@ func TestChat(t *testing.T) {
 		const maxIter = 8
 		creative.MaxToolIterations = maxIter
 
-		prv := &TestAi{
-			toolCallsOnToolRequest: []creative.ToolCall{
+		prv := &creative.MockAI{
+			ToolCallsOnToolRequest: []creative.ToolCall{
 				{
 					ID:   "call_test_1",
 					Type: "function",
@@ -64,7 +64,7 @@ func TestChat(t *testing.T) {
 					},
 				},
 			},
-			toolCallsFinalResponse: "Финальный ответ после исчерпания итераций",
+			ToolCallsFinalResponse: "Финальный ответ после исчерпания итераций",
 		}
 		ch := creative.NewChat(prv)
 		ch.SetTools([]creative.Tool{
@@ -92,11 +92,11 @@ func TestChat(t *testing.T) {
 	t.Run("iteration_exhaustion_tools_restored", func(t *testing.T) {
 		creative.MaxToolIterations = 1
 
-		prv := &TestAi{
-			toolCallsOnToolRequest: []creative.ToolCall{
+		prv := &creative.MockAI{
+			ToolCallsOnToolRequest: []creative.ToolCall{
 				{ID: "call_1", Type: "function", Function: creative.ToolCallFunction{Name: "mock_tool", Arguments: "{}"}},
 			},
-			toolCallsFinalResponse: "done",
+			ToolCallsFinalResponse: "done",
 		}
 		ch := creative.NewChat(prv)
 		tools := []creative.Tool{
@@ -129,8 +129,8 @@ func TestChat(t *testing.T) {
 	t.Run("iteration_not_exhausted_no_force", func(t *testing.T) {
 		creative.MaxToolIterations = 8
 
-		prv := &TestAi{
-			resp: "Обычный ответ без вызова инструментов",
+		prv := &creative.MockAI{
+			Resp: "Обычный ответ без вызова инструментов",
 		}
 		ch := creative.NewChat(prv)
 		ch.SetTools(creative.DefaultTools())
