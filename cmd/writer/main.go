@@ -19,11 +19,11 @@ import (
 var writerPrompt string
 
 // maxContinueMessages prevents infinite loop in runUntilDone.
-var maxContinueMessages = 20
+var maxContinueMessages = 5
 
 // maxBranchDepth limits subtask branching: at depth >= maxBranchDepth
 // the "subtask" tool is not provided, so the AI does the work itself.
-const maxBranchDepth = 2
+const maxBranchDepth = 1
 
 type WriterConfig struct {
 	Query       QueryData `json:"query"`
@@ -54,7 +54,7 @@ func main() {
 		fmt.Fprintf(os.Stdout, "Example of config:\n%s\n", func() string {
 			example := Config{
 				Provider: creative.ProviderConfig{
-					Endpoint:    "http://192.168.56.1:1234/v1",
+					Endpoint:    "http://127.0.0.1:1234/v1",
 					Model:       "openai/gpt-oss-20b",
 					Key:         "lmstudio",
 					ContextSize: 24000,
@@ -131,11 +131,11 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
 		return fmt.Errorf("Cannot create output directory: %v", err)
 	}
 
-	log.Printf("[writer] задача: %s", q.Query.Name)
+	log.Printf("[writer] задача: %#v\n\n", q.Query)
 	write(q.Filename, "%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query.Name)
-	if q.Query.Description != "" {
-		write(q.Filename, "%s\n", q.Query.Description)
-	}
+	// if q.Query.Description != "" {
+	// 	write(q.Filename, "%s\n", q.Query.Description)
+	// }
 
 	tmpl := struct {
 		Query       string
@@ -216,9 +216,9 @@ func subtaskQuery(parent QueryData, subtasks []QueryData, is int) QueryData {
 			b.WriteString("   ")
 		}
 		b.WriteString(s.Name)
-		if s.Description != "" {
-			fmt.Fprintf(&b, ": %s", s.Description)
-		}
+		//if s.Description != "" {
+		//	fmt.Fprintf(&b, ": %s", s.Description)
+		//}
 		b.WriteString("\n")
 	}
 	fmt.Fprintf(&b, "Реши только эту подзадачу: %s\n", subtasks[is].Name)
@@ -272,8 +272,9 @@ func subtaskTool(subtasks *[]QueryData) creative.Tool {
 			if name == "" {
 				return "Ошибка: поле name не должно быть пустым"
 			}
-			log.Printf("add subtask: %s", name)
-			*subtasks = append(*subtasks, QueryData{Name: name, Description: strings.TrimSpace(p.Description)})
+			q := QueryData{Name: name, Description: strings.TrimSpace(p.Description)}
+			log.Printf("add subtask: %#v\n\n", q)
+			*subtasks = append(*subtasks, q)
 			return "Подзадача поставлена в очередь. Не пиши её текст сам — она будет выполнена отдельным запросом."
 		},
 	}
@@ -302,8 +303,9 @@ func runUntilDone(chat *creative.Chat, firstMsg string) (string, error) {
 			log.Printf("[writer] достигнут лимит продолжений (%d)", maxContinueMessages)
 			break
 		}
-		log.Printf("[writer] продолжаю...")
-		msg = "Продолжи"
+		log.Printf("\n[writer] продолжаю...(%d of %d)", i, maxContinueMessages)
+		msg = fmt.Sprintf("Продолжи.У тебя осталось %d из %d(включительно) дополнить себя, если надо.",
+			i, maxContinueMessages)
 
 		if strings.Contains(resp, "Я закончил") {
 			break
