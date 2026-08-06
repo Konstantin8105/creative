@@ -151,11 +151,13 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 		return fmt.Errorf("Cannot create output directory: %v", err)
 	}
 
-	log.Printf("[writer] задача: %s", q.Query.Name)
-	file <- fmt.Sprintf("%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query.Name)
-	if q.Query.Description != "" {
-		file <- fmt.Sprintf("%s\n", q.Query.Description)
+	log.Printf("[writer] задача: %#v\n", q.Query)
+	if file != nil {
+		file <- fmt.Sprintf("%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query.Name)
 	}
+	//if q.Query.Description != "" {
+	//	file <- fmt.Sprintf("%s\n", q.Query.Description)
+	//}
 
 	tmpl := struct {
 		Query       string
@@ -164,9 +166,9 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 	}{
 		Query: fmt.Sprintf("Имя задачи: %s\nОписание для задачи: %s\n", q.Query.Name, q.Query.Description),
 	}
-
+	// prepare tools
 	var tools []creative.Tool
-	if 0 < len(q.BookFolders) { // BookTools panics on an empty list
+	if 0 < len(q.BookFolders) {
 		tools = append(tools, creative.BookTools(q.BookFolders...)...)
 		tmpl.AddBookTool = true
 	}
@@ -175,7 +177,7 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 		tools = append(tools, subtaskTool(&subtasks))
 		tmpl.AddSubTask = true
 	}
-
+	// prepare prompt
 	var prompt string
 	{
 		t, err := template.New("todos").Parse(writerPrompt)
@@ -189,8 +191,7 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 		}
 		prompt = buf.String()
 	}
-	// log.Printf("prompt: %s", prompt)
-
+	// prepare chat
 	chat := creative.NewChat(prvAI)
 	chat.AddSystem(prompt)
 	chat.SetTools(tools)
@@ -199,31 +200,30 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 			fmt.Print(chunk)
 		},
 	})
-
 	// run until done
-	for i, msg := 0, "Выполни задачу."; i <= maxContinueMessages; i++ {
+	for i, msg := 0, ""; i <= maxContinueMessages; i++ {
+		if maxBranchDepth-i == 0 {
+			msg = "Это последнее сообщение. Пора окончивать."
+		} else {
+			msg = fmt.Sprintf("Продолжи выполнять свою задачу. У тебя есть возможность написать %d сообщений.", maxBranchDepth-i)
+		}
+		log.Printf("[writer] msg: %s\n", msg)
 		resp, err := chat.SendStream(msg, true)
 		if err != nil {
 			return err
 		}
-
-		file <- fmt.Sprintf("\n%s\n", strings.TrimSpace(resp))
-		if i == maxContinueMessages {
-			log.Printf("[writer] достигнут лимит продолжений (%d)", maxContinueMessages)
-			break
+		const endWord = "Я закончил"
+		if file != nil {
+			file <- fmt.Sprintf("\n%s\n", strings.TrimSpace(strings.ReplaceAll(resp, endWord, "")))
 		}
-		log.Printf("[writer] продолжаю...")
-		msg = "Продолжи"
-
-		if strings.Contains(resp, "Я закончил") {
+		if strings.Contains(resp, endWord) {
 			break
 		}
 	}
-
+	// run sub tasks
 	for is, subtask := range subtasks {
 		log.Printf("Depth %s.%d.%d %s\n", prefix, q.depth, is, subtask.Name)
 	}
-
 	for is := range subtasks {
 		if err := runQuery(prvAI, WriterConfig{
 			Query:       subtaskQuery(q.Query, subtasks, is),
