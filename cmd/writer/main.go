@@ -112,10 +112,13 @@ func main() {
 			file := make(chan string, 1)
 			go func() {
 				for str := range file {
-					dat, err := os.ReadFile(q.Filename)
-					if err != nil {
-						log.Printf("Error: %v", err)
-						continue
+					var dat []byte
+					if _, err := os.Stat(q.Filename); !os.IsNotExist(err) {
+						dat, err = os.ReadFile(q.Filename)
+						if err != nil {
+							log.Printf("Error: %v", err)
+							continue
+						}
 					}
 					dat = append(dat, []byte("\n"+str)...)
 					err = os.WriteFile(q.Filename, dat, 0644)
@@ -197,15 +200,19 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 	chat.SetTools(tools)
 	chat.SetCallback(&creative.ChatEventCallback{
 		OnStreamChunk: func(chunk string) {
-			fmt.Print(chunk)
+			fmt.Fprint(os.Stdout, chunk)
+		},
+		OnToolResult: func(name string, result string) {
+			short := []rune(result)
+			fmt.Fprintf(os.Stdout, "Tool result: %s\n%s\n\n", name, string(short[:60]))
 		},
 	})
 	// run until done
 	for i, msg := 0, ""; i <= maxContinueMessages; i++ {
-		if maxBranchDepth-i == 0 {
+		if maxContinueMessages-i == 0 {
 			msg = "Это последнее сообщение. Пора окончивать."
 		} else {
-			msg = fmt.Sprintf("Продолжи выполнять свою задачу. У тебя есть возможность написать %d сообщений.", maxBranchDepth-i)
+			msg = fmt.Sprintf("Продолжи выполнять свою задачу. У тебя есть возможность написать %d сообщений.", maxContinueMessages-i)
 		}
 		log.Printf("[writer] msg: %s\n", msg)
 		resp, err := chat.SendStream(msg, true)
