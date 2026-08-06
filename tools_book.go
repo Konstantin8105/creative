@@ -284,7 +284,15 @@ func readBookLinesTool(folders []string, params string) string {
 	return buf.String()
 }
 
-func searchInBookTool(folders []string, params string, statistic bool) string {
+func searchInBookTool(folders []string, params string, statistic bool) (result string) {
+	defer func() {
+		if len(result) < 10000 {
+			return
+		}
+		// too big output
+		rs := []rune(result)
+		result = string(rs[:10000]) + "\nРезультатов слишком много, поэтому выдается только часть. Постарайся делать более сложные запросы в поиске."
+	}()
 	params = strings.TrimSpace(params)
 	if params == "" {
 		return "Ошибка: не указаны параметры. Используйте: search_in_book \"имя_файла\" \"паттерн\" [режим]"
