@@ -212,7 +212,7 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 		if maxContinueMessages-i == 0 {
 			msg = "Это последнее сообщение. Пора окончивать."
 		} else {
-			msg = fmt.Sprintf("Продолжи выполнять свою задачу. У тебя есть возможность написать %d сообщений.", maxContinueMessages-i)
+			msg = fmt.Sprintf("Продолжи выполнять свою задачу. У тебя есть возможность написать ещё %d сообщений.", maxContinueMessages-i)
 		}
 		log.Printf("[writer] msg: %s\n", msg)
 		resp, err := chat.SendStream(msg, true)
