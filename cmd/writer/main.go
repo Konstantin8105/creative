@@ -19,11 +19,11 @@ import (
 var writerPrompt string
 
 // maxContinueMessages prevents infinite loop in runUntilDone.
-var maxContinueMessages = 20
+var maxContinueMessages = 10
 
 // maxBranchDepth limits subtask branching: at depth >= maxBranchDepth
 // the "subtask" tool is not provided, so the AI does the work itself.
-const maxBranchDepth = 2
+const maxBranchDepth = 1
 
 type WriterConfig struct {
 	Query       QueryData `json:"query"`
@@ -109,7 +109,27 @@ func main() {
 		}
 		prvAI := creative.NewRouterAI(cfg.Provider)
 		for _, q := range cfg.Queries {
-			if err := runQuery(prvAI, q, ""); err != nil {
+			file := make(chan string, 1)
+			go func() {
+				for str := range file {
+					dat, err := os.ReadFile(q.Filename)
+					if err != nil {
+						log.Printf("Error: %v", err)
+						continue
+					}
+					dat = append(dat, []byte("\n"+str)...)
+					err = os.WriteFile(q.Filename, dat, 0644)
+					if err != nil {
+						log.Printf("Error: %v", err)
+						continue
+					}
+				}
+			}()
+			defer func() {
+				close(file)
+			}()
+			err := runQuery(prvAI, q, file, "")
+			if err != nil {
 				fmt.Fprintf(os.Stdout, "[writer] ошибка: %v", err)
 				continue
 			}
@@ -117,7 +137,7 @@ func main() {
 	}
 }
 
-func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
+func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefix string) error {
 	if q.Query.Name == "" {
 		return fmt.Errorf("writer.query is required")
 	}
@@ -132,9 +152,9 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
 	}
 
 	log.Printf("[writer] задача: %s", q.Query.Name)
-	write(q.Filename, "%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query.Name)
+	file <- fmt.Sprintf("%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query.Name)
 	if q.Query.Description != "" {
-		write(q.Filename, "%s\n", q.Query.Description)
+		file <- fmt.Sprintf("%s\n", q.Query.Description)
 	}
 
 	tmpl := struct {
@@ -174,13 +194,32 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
 	chat := creative.NewChat(prvAI)
 	chat.AddSystem(prompt)
 	chat.SetTools(tools)
+	chat.SetCallback(&creative.ChatEventCallback{
+		OnStreamChunk: func(chunk string) {
+			fmt.Print(chunk)
+		},
+	})
 
-	content, err := runUntilDone(chat, "Выполни задачу.")
-	if err != nil {
-		return fmt.Errorf("run: %v", err)
+	// run until done
+	for i, msg := 0, "Выполни задачу."; i <= maxContinueMessages; i++ {
+		resp, err := chat.SendStream(msg, true)
+		if err != nil {
+			return err
+		}
+
+		file <- fmt.Sprintf("\n%s\n", strings.TrimSpace(resp))
+		if i == maxContinueMessages {
+			log.Printf("[writer] достигнут лимит продолжений (%d)", maxContinueMessages)
+			break
+		}
+		log.Printf("[writer] продолжаю...")
+		msg = "Продолжи"
+
+		if strings.Contains(resp, "Я закончил") {
+			break
+		}
 	}
 
-	write(q.Filename, "\n%s\n", content)
 	for is, subtask := range subtasks {
 		log.Printf("Depth %s.%d.%d %s\n", prefix, q.depth, is, subtask.Name)
 	}
@@ -191,7 +230,7 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, prefix string) error {
 			Filename:    q.Filename,
 			BookFolders: q.BookFolders,
 			depth:       q.depth + 1,
-		}, fmt.Sprintf("%s.%d", prefix, is)); err != nil {
+		}, file, fmt.Sprintf("%s.%d", prefix, is)); err != nil {
 			fmt.Fprintf(os.Stdout, "runQuery error: %v", err)
 			continue
 		}
@@ -226,18 +265,6 @@ func subtaskQuery(parent QueryData, subtasks []QueryData, is int) QueryData {
 		fmt.Fprintf(&b, "%s\n", subtasks[is].Description)
 	}
 	return QueryData{Name: subtasks[is].Name, Description: strings.TrimSpace(b.String())}
-}
-
-func write(filename string, format string, a ...any) {
-	dat, _ := os.ReadFile(filename)
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, format, a...)
-	dat = append(dat, buf.Bytes()...)
-	err := os.WriteFile(filename, dat, 0644)
-	if err != nil {
-		log.Printf("Error: %v", err)
-		return
-	}
 }
 
 // subtaskTool is a single uniform tool: it behaves identically at every level
@@ -277,37 +304,4 @@ func subtaskTool(subtasks *[]QueryData) creative.Tool {
 			return "Подзадача поставлена в очередь. Не пиши её текст сам — она будет выполнена отдельным запросом."
 		},
 	}
-}
-
-func runUntilDone(chat *creative.Chat, firstMsg string) (string, error) {
-	var acc strings.Builder
-	msg := firstMsg
-
-	chat.SetCallback(&creative.ChatEventCallback{
-		OnStreamChunk: func(chunk string) {
-			fmt.Print(chunk)
-		},
-	})
-
-	for i := 0; i <= maxContinueMessages; i++ {
-		// log.Printf("iter:%d", i)
-		resp, err := chat.SendStream(msg, true)
-		if err != nil {
-			return "", err
-		}
-		// log.Printf("iter:%d %s", i, resp)
-
-		acc.WriteString(resp)
-		if i == maxContinueMessages {
-			log.Printf("[writer] достигнут лимит продолжений (%d)", maxContinueMessages)
-			break
-		}
-		log.Printf("[writer] продолжаю...")
-		msg = "Продолжи"
-
-		if strings.Contains(resp, "Я закончил") {
-			break
-		}
-	}
-	return strings.TrimSpace(acc.String()), nil
 }
