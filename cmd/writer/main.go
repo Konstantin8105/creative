@@ -19,7 +19,7 @@ import (
 var writerPrompt string
 
 // maxContinueMessages prevents infinite loop in runUntilDone.
-var maxContinueMessages = 10
+var maxContinueMessages = 5
 
 // maxBranchDepth limits subtask branching: at depth >= maxBranchDepth
 // the "subtask" tool is not provided, so the AI does the work itself.
@@ -54,7 +54,7 @@ func main() {
 		fmt.Fprintf(os.Stdout, "Example of config:\n%s\n", func() string {
 			example := Config{
 				Provider: creative.ProviderConfig{
-					Endpoint:    "http://192.168.56.1:1234/v1",
+					Endpoint:    "http://127.0.0.1:1234/v1",
 					Model:       "openai/gpt-oss-20b",
 					Key:         "lmstudio",
 					ContextSize: 24000,
@@ -255,9 +255,9 @@ func subtaskQuery(parent QueryData, subtasks []QueryData, is int) QueryData {
 			b.WriteString("   ")
 		}
 		b.WriteString(s.Name)
-		if s.Description != "" {
-			fmt.Fprintf(&b, ": %s", s.Description)
-		}
+		//if s.Description != "" {
+		//	fmt.Fprintf(&b, ": %s", s.Description)
+		//}
 		b.WriteString("\n")
 	}
 	fmt.Fprintf(&b, "Реши только эту подзадачу: %s\n", subtasks[is].Name)
@@ -299,8 +299,9 @@ func subtaskTool(subtasks *[]QueryData) creative.Tool {
 			if name == "" {
 				return "Ошибка: поле name не должно быть пустым"
 			}
-			log.Printf("add subtask: %s", name)
-			*subtasks = append(*subtasks, QueryData{Name: name, Description: strings.TrimSpace(p.Description)})
+			q := QueryData{Name: name, Description: strings.TrimSpace(p.Description)}
+			log.Printf("add subtask: %#v\n\n", q)
+			*subtasks = append(*subtasks, q)
 			return "Подзадача поставлена в очередь. Не пиши её текст сам — она будет выполнена отдельным запросом."
 		},
 	}
