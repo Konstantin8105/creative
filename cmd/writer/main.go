@@ -204,7 +204,10 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 		},
 		OnToolResult: func(name string, result string) {
 			short := []rune(result)
-			fmt.Fprintf(os.Stdout, "Tool result: %s\n%s\n\n", name, string(short[:60]))
+			if 60 < len(short) {
+				short = short[:60]
+			}
+			fmt.Fprintf(os.Stdout, "Tool result: %s\n%s\n\n", name, string(short))
 		},
 	})
 	// run until done
