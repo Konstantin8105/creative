@@ -155,9 +155,9 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 	}
 
 	log.Printf("[writer] задача: %#v\n", q.Query)
-	if file != nil {
-		file <- fmt.Sprintf("%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query.Name)
-	}
+	//if file != nil {
+	//	file <- fmt.Sprintf("%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query.Name)
+	//}
 	//if q.Query.Description != "" {
 	//	file <- fmt.Sprintf("%s\n", q.Query.Description)
 	//}
