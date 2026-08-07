@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -39,7 +40,7 @@ type Query struct {
 	depth       int
 }
 
-func flowToFile(q Query, path string) (file chan string, c func()) {
+func flowToFile(q Query, path string, f func(file chan string)) {
 	var filename string
 	// generate filename
 	for iter := 0; ; iter++ {
@@ -57,7 +58,7 @@ func flowToFile(q Query, path string) (file chan string, c func()) {
 		panic(fmt.Errorf("Cannot create output directory: %v", err))
 	}
 	//
-	file = make(chan string, 1)
+	file := make(chan string, 1)
 	go func() {
 		for str := range file {
 			var dat []byte
@@ -76,7 +77,10 @@ func flowToFile(q Query, path string) (file chan string, c func()) {
 			}
 		}
 	}()
-	return file, func() { close(file) }
+	// run
+	f(file)
+	// stop
+	close(file)
 }
 
 func main() {
@@ -139,14 +143,39 @@ func main() {
 		return
 	}
 	prvAI := creative.NewRouterAI(cfg.Provider)
-	for _, q := range cfg.Queries {
-		file, closeFile := flowToFile(q, path)
-		err := runQuery(prvAI, q, file)
-		closeFile()
+	// prepare queue
+	for i, q := range cfg.Queries {
+		fmt.Fprintf(os.Stdout, "Pos %02d: %s\n", i, q.Name)
+	}
+	var list string
+	fmt.Fprintf(os.Stdout, "Enter list of task: ")
+	_, err = fmt.Scanln(&list)
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "Scan error: %v\n", err)
+		return
+	}
+	fs := strings.Split(list, ",")
+	var indexes []int64
+	for _, field := range fs {
+		field = strings.TrimSpace(field)
+		v, err := strconv.ParseInt(field, 10, 64)
 		if err != nil {
-			fmt.Fprintf(os.Stdout, "[writer] ошибка: %v", err)
-			continue
+			fmt.Fprintf(os.Stdout, "ParseInt: %v\n", err)
+			return
 		}
+		indexes = append(indexes, v)
+	}
+	if len(indexes) == 0 {
+		fmt.Fprintf(os.Stdout, "Empty list\n")
+		return
+	}
+	for _, index := range indexes {
+		q := cfg.Queries[index]
+		flowToFile(q, path, func(file chan string) {
+			if err := runQuery(prvAI, q, file); err != nil {
+				fmt.Fprintf(os.Stdout, "[writer] ошибка: %v", err)
+			}
+		})
 	}
 }
 
