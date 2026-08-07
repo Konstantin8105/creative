@@ -39,7 +39,7 @@ type Query struct {
 	depth       int
 }
 
-func (q Query) getFilename(path string) (file chan string, c func()) {
+func flowToFile(q Query, path string) (file chan string, c func()) {
 	var filename string
 	// generate filename
 	for iter := 0; ; iter++ {
@@ -140,13 +140,13 @@ func main() {
 	}
 	prvAI := creative.NewRouterAI(cfg.Provider)
 	for _, q := range cfg.Queries {
-		file, closeFile := q.getFilename(path)
+		file, closeFile := flowToFile(q, path)
 		err := runQuery(prvAI, q, file)
+		closeFile()
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "[writer] ошибка: %v", err)
 			continue
 		}
-		closeFile()
 	}
 }
 
