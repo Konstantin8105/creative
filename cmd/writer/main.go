@@ -45,7 +45,7 @@ func flowToFile(q Query, path string) (file chan string, c func()) {
 	for iter := 0; ; iter++ {
 		hasher := md5.New()
 		hasher.Write([]byte(q.Name))
-		hash := hex.EncodeToString(hasher.Sum(nil))
+		hash := hex.EncodeToString(hasher.Sum(nil))[:8]
 		filename = fmt.Sprintf("%s.%s.%03d.md",
 			strings.TrimSuffix(path, filepath.Ext(path)), hash, iter)
 		if _, err := os.Stat(filename); !os.IsNotExist(err) {
