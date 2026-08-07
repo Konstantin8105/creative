@@ -287,11 +287,11 @@ func readBookLinesTool(folders []string, params string) string {
 func searchInBookTool(folders []string, params string, statistic bool) (result string) {
 	defer func() {
 		const maxLenght = 10000
-		if len(result) < maxLenght {
+		rs := []rune(result)
+		if len(rs) < maxLenght {
 			return
 		}
 		// too big output
-		rs := []rune(result)
 		result = string(rs[:maxLenght]) + "\nРезультатов слишком много, поэтому выдается только часть. Постарайся делать более сложные запросы в поиске или искать в конкретных файлах/книгах. В том числе попробовать search_stats для оценки количества совпадений. А если информации достаточно, то использовать имеющуюся."
 	}()
 	params = strings.TrimSpace(params)
