@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -19,38 +21,74 @@ import (
 var writerPrompt string
 
 // maxContinueMessages prevents infinite loop in runUntilDone.
-var maxContinueMessages = 5
+const maxContinueMessages = 5
 
 // maxBranchDepth limits subtask branching: at depth >= maxBranchDepth
 // the "subtask" tool is not provided, so the AI does the work itself.
 const maxBranchDepth = 1
 
-type WriterConfig struct {
-	Query       QueryData `json:"query"`
-	Filename    string    `json:"filename"`
-	BookFolders []string  `json:"book_folders,omitempty"`
+type Config struct {
+	Provider creative.ProviderConfig `json:"provider"`
+	Queries  []Query                 `json:"queries"`
+}
+
+type Query struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	BookFolders []string `json:"book_folders,omitempty"`
 	depth       int
 }
 
-type QueryData struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-}
-
-type Config struct {
-	Provider creative.ProviderConfig `json:"provider"`
-	Queries  []WriterConfig          `json:"queries"`
+func (q Query) getFilename(path string) (file chan string, c func()) {
+	var filename string
+	// generate filename
+	for iter := 0; ; iter++ {
+		hasher := md5.New()
+		hasher.Write([]byte(q.Name))
+		hash := hex.EncodeToString(hasher.Sum(nil))
+		filename = fmt.Sprintf("%s.%s.%03d.md",
+			strings.TrimSuffix(path, filepath.Ext(path)), hash, iter)
+		if _, err := os.Stat(filename); !os.IsNotExist(err) {
+			break
+		}
+	}
+	// create folders
+	if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+		panic(fmt.Errorf("Cannot create output directory: %v", err))
+	}
+	//
+	file = make(chan string, 1)
+	go func() {
+		for str := range file {
+			var dat []byte
+			if _, err := os.Stat(filename); !os.IsNotExist(err) {
+				dat, err = os.ReadFile(filename)
+				if err != nil {
+					log.Printf("Error: %v", err)
+					continue
+				}
+			}
+			dat = append(dat, []byte("\n"+str)...)
+			err := os.WriteFile(filename, dat, 0644)
+			if err != nil {
+				log.Printf("Error: %v", err)
+				continue
+			}
+		}
+	}()
+	return file, func() { close(file) }
 }
 
 func main() {
 	log.SetFlags(log.Ltime | log.Lshortfile)
 	log.SetOutput(os.Stdout)
 
-	configs := flag.String("configs", "", "Comma-separated list of book config JSONs")
+	config := flag.String("config", "", "Config JSON")
 	flag.Parse()
+	*config = strings.TrimSpace(*config)
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stdout, "Usage: writer -configs book1.json,book2.json,...\n")
+		fmt.Fprintf(os.Stdout, "Usage: writer -configs book1.json\n")
 		fmt.Fprintf(os.Stdout, "Example of config:\n%s\n", func() string {
 			example := Config{
 				Provider: creative.ProviderConfig{
@@ -59,115 +97,71 @@ func main() {
 					Key:         "lmstudio",
 					ContextSize: 24000,
 				},
-			}
-			example.Queries = append(example.Queries,
-				WriterConfig{
-					Query: QueryData{
-						Name: "example of query",
-					},
-					Filename:    "filename of result",
-					BookFolders: []string{"c:\folder", "."},
-				},
-				WriterConfig{
-					Query: QueryData{
+				Queries: []Query{
+					{
+						Name:        "example of query",
+						BookFolders: []string{"c:\folder", "."},
+					}, {
 						Name:        "second example",
 						Description: "write shortly",
+						BookFolders: []string{"c:\folder", "."},
 					},
-					Filename: "second filename",
 				},
-			)
+			}
 			dat, _ := json.MarshalIndent(example, " ", "   ")
 			return string(dat)
 		}())
 		flag.PrintDefaults()
 	}
-	if *configs == "" {
+	if *config == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	for _, path := range strings.Split(*configs, ",") {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			continue
-		}
-		log.Printf("[writer] конфиг: %s", path)
-		raw, err := os.ReadFile(path)
+	path := strings.TrimSpace(*config)
+	if path == "" {
+		fmt.Fprintf(os.Stdout, "Empty config")
+		return
+	}
+	log.Printf("[writer] конфиг: %s", path)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "Cannot read config: %v", err)
+		return
+	}
+	var cfg Config
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		fmt.Fprintf(os.Stdout, "Cannot parse config: %v", err)
+		return
+	}
+	if len(cfg.Queries) == 0 {
+		fmt.Fprintf(os.Stdout, "queries is required")
+		return
+	}
+	prvAI := creative.NewRouterAI(cfg.Provider)
+	for _, q := range cfg.Queries {
+		file, closeFile := q.getFilename(path)
+		err := runQuery(prvAI, q, file)
 		if err != nil {
-			fmt.Fprintf(os.Stdout, "Cannot read config: %v", err)
+			fmt.Fprintf(os.Stdout, "[writer] ошибка: %v", err)
 			continue
 		}
-
-		var cfg Config
-		if err := json.Unmarshal(raw, &cfg); err != nil {
-			fmt.Fprintf(os.Stdout, "Cannot parse config: %v", err)
-			continue
-		}
-		if len(cfg.Queries) == 0 {
-			fmt.Fprintf(os.Stdout, "queries is required")
-			continue
-		}
-		prvAI := creative.NewRouterAI(cfg.Provider)
-		for _, q := range cfg.Queries {
-			file := make(chan string, 1)
-			go func() {
-				for str := range file {
-					var dat []byte
-					if _, err := os.Stat(q.Filename); !os.IsNotExist(err) {
-						dat, err = os.ReadFile(q.Filename)
-						if err != nil {
-							log.Printf("Error: %v", err)
-							continue
-						}
-					}
-					dat = append(dat, []byte("\n"+str)...)
-					err = os.WriteFile(q.Filename, dat, 0644)
-					if err != nil {
-						log.Printf("Error: %v", err)
-						continue
-					}
-				}
-			}()
-			defer func() {
-				close(file)
-			}()
-			err := runQuery(prvAI, q, file, "")
-			if err != nil {
-				fmt.Fprintf(os.Stdout, "[writer] ошибка: %v", err)
-				continue
-			}
-		}
+		closeFile()
 	}
 }
 
-func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefix string) error {
-	if q.Query.Name == "" {
+func runQuery(prvAI creative.AIrunner, q Query, file chan<- string) error {
+	log.Printf("Task: %#v\n", q)
+	if q.Name == "" {
 		return fmt.Errorf("writer.query is required")
 	}
-	if q.Filename == "" {
-		return fmt.Errorf("writer.filename is required")
-	}
-	if _, err := os.Stat(q.Filename); q.depth == 0 && !os.IsNotExist(err) {
-		return fmt.Errorf("[writer] файл уже существует: %s — пропускаем", q.Filename)
-	}
-	if err := os.MkdirAll(filepath.Dir(q.Filename), 0755); err != nil {
-		return fmt.Errorf("Cannot create output directory: %v", err)
-	}
-
-	log.Printf("[writer] задача: %#v\n", q.Query)
-	//if file != nil {
-	//	file <- fmt.Sprintf("%s %s.%d %s\n", strings.Repeat("#", q.depth+1), prefix, q.depth, q.Query.Name)
-	//}
-	//if q.Query.Description != "" {
-	//	file <- fmt.Sprintf("%s\n", q.Query.Description)
-	//}
-
+	// prepare prompt template
 	tmpl := struct {
 		Query       string
 		AddBookTool bool
 		AddSubTask  bool
 	}{
-		Query: fmt.Sprintf("Имя задачи: %s\nОписание для задачи: %s\n", q.Query.Name, q.Query.Description),
+		Query: fmt.Sprintf("Имя задачи: %s\nОписание для задачи: %s\n", q.Name, q.Description),
 	}
 	// prepare tools
 	var tools []creative.Tool
@@ -175,7 +169,7 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 		tools = append(tools, creative.BookTools(q.BookFolders...)...)
 		tmpl.AddBookTool = true
 	}
-	var subtasks []QueryData
+	var subtasks []Query
 	if q.depth < maxBranchDepth {
 		tools = append(tools, subtaskTool(&subtasks))
 		tmpl.AddSubTask = true
@@ -231,16 +225,13 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 		}
 	}
 	// run sub tasks
-	for is, subtask := range subtasks {
-		log.Printf("Depth %s.%d.%d %s\n", prefix, q.depth, is, subtask.Name)
-	}
 	for is := range subtasks {
-		if err := runQuery(prvAI, WriterConfig{
-			Query:       subtaskQuery(q.Query, subtasks, is),
-			Filename:    q.Filename,
+		if err := runQuery(prvAI, Query{
+			Name:        subtasks[is].Name,
+			Description: subtaskQuery(q, subtasks, is),
 			BookFolders: q.BookFolders,
 			depth:       q.depth + 1,
-		}, file, fmt.Sprintf("%s.%d", prefix, is)); err != nil {
+		}, file); err != nil {
 			fmt.Fprintf(os.Stdout, "runQuery error: %v", err)
 			continue
 		}
@@ -248,10 +239,7 @@ func runQuery(prvAI creative.AIrunner, q WriterConfig, file chan<- string, prefi
 	return nil
 }
 
-// subtaskQuery строит QueryData для is-й подзадачи: общая задача, список всех
-// подзадач и только одна помеченная «реши её», чтобы каждый рекурсивный
-// запрос решал ровно одну конкретную задачу.
-func subtaskQuery(parent QueryData, subtasks []QueryData, is int) QueryData {
+func subtaskQuery(parent Query, subtasks []Query, is int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Общая задача: %s\n", parent.Name)
 	if parent.Description != "" {
@@ -274,12 +262,12 @@ func subtaskQuery(parent QueryData, subtasks []QueryData, is int) QueryData {
 	if subtasks[is].Description != "" {
 		fmt.Fprintf(&b, "%s\n", subtasks[is].Description)
 	}
-	return QueryData{Name: subtasks[is].Name, Description: strings.TrimSpace(b.String())}
+	return strings.TrimSpace(b.String())
 }
 
 // subtaskTool is a single uniform tool: it behaves identically at every level
 // and does not know whether it is used for the main task or a subtask.
-func subtaskTool(subtasks *[]QueryData) creative.Tool {
+func subtaskTool(subtasks *[]Query) creative.Tool {
 	return creative.Tool{
 		Name:        "subtask",
 		Description: "Поставить подзадачу в очередь. Она будет выполнена отдельным запросом.",
@@ -309,7 +297,7 @@ func subtaskTool(subtasks *[]QueryData) creative.Tool {
 			if name == "" {
 				return "Ошибка: поле name не должно быть пустым"
 			}
-			q := QueryData{Name: name, Description: strings.TrimSpace(p.Description)}
+			q := Query{Name: name, Description: strings.TrimSpace(p.Description)}
 			log.Printf("add subtask: %#v\n\n", q)
 			*subtasks = append(*subtasks, q)
 			return "Подзадача поставлена в очередь. Не пиши её текст сам — она будет выполнена отдельным запросом."
